@@ -44,7 +44,7 @@ export function lengthRows(px, { root = 16, parent = root, width = 1440, height 
 /** Every px length in a CSS snippet as rem; 1px borders and 0 stay as they are. */
 export function pxToRemInCss(css, root = 16, { keepOnePx = true } = {}) {
   let count = 0
-  const out = css.replace(/(-?\d*\.?\d+)px\b/g, (whole, number) => {
+  const out = css.replace(/(?<![\d.])(-?(?:\d+(?:\.\d+)?|\.\d+))px\b/g, (whole, number) => {
     const value = Number(number)
     if (value === 0 || (keepOnePx && Math.abs(value) === 1)) return whole
     count++
