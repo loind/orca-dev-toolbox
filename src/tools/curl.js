@@ -221,39 +221,72 @@ function toPython(request) {
 }
 
 function shellQuote(text) {
-  return /^[\w@%+=:,./-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`
+  return /^(?!=)[\w@%+=:,./-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`
 }
 
+// HTTPie reads `name:value`, `name=value`, `name:=json`, `name==query`, `name@file` and `name;`, and
+// `:@`, `=@`, `:=@`, `==@` read a local file. A backslash before `: ; = @` makes that character plain,
+// so the separators in a name and a leading `@` or `=` in a value are escaped and text from the curl
+// command stays text. What HTTPie 3.2.4 does with backslashes (checked by running it):
+// - In a name, a backslash before `: ; = @` or at the end of the name cannot be written: `\\` stays
+//   two backslashes, so `\\:` still ends the name. Such a name is an error here, not a wrong item.
+// - In a name of a JSON body, HTTPie also merges two backslashes into one (nested-key syntax).
+// - In a value, a backslash before `: ; = @` is dropped by HTTPie (`a\@b` is sent as `a@b`). The
+//   value cannot start another item, so this is left as it was.
+function itemName(text) {
+  if (/\\([:;=@]|$)/.test(text)) throw new Error('HTTPie cannot send a backslash before : ; = or @ in a name.')
+  return text.replace(/[:;=@]/g, '\\$&')
+}
+const itemValue = (text) => text.replace(/^[=@]/, '\\$&')
+const item = (name, separator, value) => itemName(name) + separator + itemValue(value)
+
 function toHttpie(request) {
-  const parts = ['http']
-  if (request.followRedirects) parts.push('--follow')
-  if (request.insecure) parts.push('--verify=no')
-  if (request.form.length) parts.push('--multipart')
+  // HTTPie takes the first word as a method only when it is all letters; any other word is the URL.
+  if (!/^[A-Za-z]+$/.test(request.method)) throw new Error('HTTPie only takes letters in a method, like GET or PATCH.')
+  const options = ['http']
+  if (request.followRedirects) options.push('--follow')
+  if (request.insecure) options.push('--verify=no')
+  if (request.form.length) options.push('--multipart')
   const json = jsonBody(request)
   const raw = json === undefined && request.body !== null
   const formEncoded = raw && request.headers.some(([n, v]) => n.toLowerCase() === 'content-type' && /x-www-form-urlencoded/i.test(v))
-  if (formEncoded) parts.push('--form')
-  if (request.auth) parts.push('--auth', shellQuote(request.auth))
-  parts.push(request.method, shellQuote(request.url))
+  if (formEncoded) options.push('--form')
+  // `--auth -x:y` makes HTTPie read -x:y as an option, so a value that starts with `-` is attached.
+  if (request.auth) options.push(request.auth.startsWith('-') ? `--auth=${shellQuote(request.auth)}` : `--auth ${shellQuote(request.auth)}`)
+  const items = []
   for (const [n, v] of request.headers) {
     const lower = n.toLowerCase()
     if (lower === 'authorization' && request.auth) continue
     if (lower === 'content-type' && (json !== undefined || formEncoded)) continue
     if (lower === 'accept' && v === 'application/json' && json !== undefined) continue
-    parts.push(shellQuote(`${n}:${v}`))
+    items.push(item(n, ':', v))
   }
+  let body = null
+  let bodyAt = 0
   if (json !== undefined) {
     if (json && typeof json === 'object' && !Array.isArray(json)) {
-      for (const [k, v] of Object.entries(json)) parts.push(typeof v === 'string' ? shellQuote(`${k}=${v}`) : shellQuote(`${k}:=${JSON.stringify(v)}`))
-    } else parts.push(`--raw=${shellQuote(JSON.stringify(json))}`)
+      for (const [k, v] of Object.entries(json)) items.push(typeof v === 'string' ? item(k, '=', v) : item(k, ':=', JSON.stringify(v)))
+    } else {
+      body = `--raw=${shellQuote(JSON.stringify(json))}`
+      bodyAt = items.length
+    }
   } else if (formEncoded) {
     for (const pair of request.body.split('&')) {
-      const [k, v = ''] = pair.split('=').map((s) => decodeURIComponent(s.replace(/\+/g, ' ')))
-      parts.push(shellQuote(`${k}=${v}`))
+      const eq = pair.indexOf('=')
+      const [k, v] = (eq === -1 ? [pair, ''] : [pair.slice(0, eq), pair.slice(eq + 1)]).map((s) => decodeURIComponent(s.replace(/\+/g, ' ')))
+      items.push(item(k, '=', v))
     }
-  } else if (raw) parts.push(`--raw=${shellQuote(request.body)}`)
-  for (const [n, v] of request.form) parts.push(shellQuote(v.startsWith('@') ? `${n}@${v.slice(1)}` : `${n}=${v}`))
-  return parts.join(' ')
+  } else if (raw) {
+    body = `--raw=${shellQuote(request.body)}`
+    bodyAt = items.length
+  }
+  for (const [n, v] of request.form) items.push(v.startsWith('@') ? item(n, '@', v.slice(1)) : item(n, '=', v))
+  const words = items.map(shellQuote)
+  // An item that starts with `-` would be an HTTPie option (`--output=file` writes a file), so
+  // everything after `--` is read as METHOD, URL and items; --raw is an option and goes before it.
+  if (items.some((text) => text.startsWith('-'))) return [...options, ...(body ? [body] : []), '--', request.method, shellQuote(request.url), ...words].join(' ')
+  if (body) words.splice(bodyAt, 0, body)
+  return [...options, request.method, shellQuote(request.url), ...words].join(' ')
 }
 
 export const CURL_TARGETS = [['fetch', 'JavaScript fetch', toFetch], ['python', 'Python requests', toPython], ['httpie', 'HTTPie', toHttpie]]

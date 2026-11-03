@@ -102,6 +102,13 @@ const goName = (key) => {
   return /^\d/.test(name) ? `F${name}` : name
 }
 
+// A raw string cannot hold a backtick, and a quote, backslash or control character would end or
+// bend the tag value; such a key gets an interpreted string, which escapes all of them.
+const goTag = (key, options) => (/[`"\\\u0000-\u001f\u007f]/.test(key) ? JSON.stringify(`json:${JSON.stringify(key + options)}`) : `\`json:"${key}${options}"\``)
+
+// Rust string literal escapes: \ and " get a backslash, control characters become \u{..}.
+const rustString = (text) => text.replace(/[\\"\u0000-\u001f\u007f]/g, (c) => (c === '\\' || c === '"' ? `\\${c}` : `\\u{${c.charCodeAt(0).toString(16)}}`))
+
 const LANGUAGES = {
   typescript(types, root) {
     const ref = (shape) => {
@@ -141,7 +148,7 @@ const LANGUAGES = {
       }
     }
     const blocks = types.map((type) => {
-      const fields = [...type.fields].map(([key, field]) => [goName(key), ref(field.shape, field.optional), `\`json:"${key}${field.optional ? ',omitempty' : ''}"\``])
+      const fields = [...type.fields].map(([key, field]) => [goName(key), ref(field.shape, field.optional), goTag(key, field.optional ? ',omitempty' : '')])
       const width = (i) => Math.max(...fields.map((f) => f[i].length))
       return [`type ${type.name} struct {`, ...fields.map((f) => `\t${f[0].padEnd(width(0))} ${f[1].padEnd(width(1))} ${f[2]}`), '}'].join('\n')
     })
@@ -172,7 +179,7 @@ const LANGUAGES = {
         if (['type', 'match', 'ref', 'self', 'struct', 'fn', 'mod', 'use', 'impl', 'move', 'loop', 'box'].includes(name)) name = `r#${name}`
         let typeName = ref(field.shape)
         const attrs = []
-        if (name !== key) attrs.push(`rename = "${key}"`)
+        if (name !== key) attrs.push(`rename = "${rustString(key)}"`)
         if (field.optional) {
           if (!typeName.startsWith('Option<')) typeName = `Option<${typeName}>`
           attrs.push('default', 'skip_serializing_if = "Option::is_none"')
