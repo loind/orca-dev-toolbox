@@ -16,16 +16,16 @@ const BASE64 = /^[A-Za-z0-9+/_-]{8,}={0,2}$/
 const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 const CURL = /^curl\s/
 const IPV4_CIDR = /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2}|\s+\d{1,3}(\.\d{1,3}){3})?$/
-const IPV6_CIDR = /^[0-9a-f:]*::?[0-9a-f:]*(\/\d{1,3})$/i
+const IPV6_CIDR = /^(?=[^/]*:)[0-9a-f:]+\/\d{1,3}$/i
 const SQL = /^(select|insert\s+into|update|delete\s+from|with|create\s+(table|view|index)|alter\s+table)\s/i
-const XML = /^<(\?xml|[A-Za-z_][\w:.-]*)[\s\S]*>$/
+const XML = /^<(\?xml|[A-Za-z_])[\s\S]*>$/
 const SIZE = /^\d+(\.\d+)?\s*([kmgtp]i?b|bytes?)$/i
 const DURATION = /^(\d+(\.\d+)?(ms|s|m|h|d))+$|^p(\d+[wd])*(t(\d+(\.\d+)?[hms])+)?$/i
 const HIDDEN = /[\u200b-\u200f\u2060-\u2064\ufeff\u00ad\u202a-\u202e\u2066-\u2069]/
 const PEM = /^-----BEGIN [A-Z0-9 ]+-----/
 const BCRYPT = /^\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{53}$/
 const DATA_URI = /^data:[\w.+-]+\/[\w.+-]+[;,]/i
-const CSS_LENGTH = /^-?\d*\.?\d+(px|rem|em|pt|vw|vh)$/i
+const CSS_LENGTH = /^-?(\d+(\.\d+)?|\.\d+)(px|rem|em|pt|vw|vh)$/i
 const YAML_KEY = /^(---\s*\n)?[\w.-]+:(\s|$)/
 const HEX_COLOR = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 const COLOR_FN = /^(rgba?|hsla?|oklch)\([^()]*\)$/i

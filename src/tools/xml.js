@@ -1,7 +1,7 @@
 // XML pretty-printing and minifying, with a well-formedness check: SVG, plists, Maven POMs,
 // Android layouts, RSS, SOAP.
 
-const TOKEN = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<!DOCTYPE(?:[^>[]|\[[\s\S]*?\])*>|<\/?[A-Za-z_:][\w:.-]*(?:\s+(?:"[^"]*"|'[^']*'|[^'">\s/])+)*\s*\/?>|[^<]+|</g
+const TOKEN = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<!DOCTYPE(?:[^>[]|\[[^\]]*\])*>|<\/?[A-Za-z_:][\w:.-]*(?:\s+(?:"[^"]*"|'[^']*'|[^'">\s/])+)*\s*\/?>|[^<]+|</g
 
 function lineAt(text, offset) {
   return text.slice(0, offset).split('\n').length
