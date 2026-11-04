@@ -25,6 +25,7 @@ import jsx from './views/jsx.js'
 import jwt from './views/jwt.js'
 import lines from './views/lines.js'
 import number from './views/number.js'
+import objectid from './views/objectid.js'
 import password from './views/password.js'
 import qr from './views/qr.js'
 import regex from './views/regex.js'
@@ -41,7 +42,7 @@ import yaml from './views/yaml.js'
 export const GROUPS = ['Inspect', 'Encode', 'Convert', 'Format', 'Generate', 'Text']
 
 export const TOOLS = [
-  jwt, cert, time, cron, http, cidr, chars,
+  jwt, cert, time, objectid, cron, http, cidr, chars,
   base64, image, url, escape,
   yaml, csv, types, curl, jsx, cssunits, units, color, number, chmod,
   json, sql, xml,

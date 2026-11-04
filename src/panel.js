@@ -8,7 +8,7 @@ import { h, set } from './ui.js'
 const RECENT_LIMIT = 3
 const PRIVATE_KEY = /-----BEGIN (?=[A-Z0-9 ]*-----)[A-Z0-9 ]*PRIVATE KEY/
 // What a pasted value is, where the tool's title does not say it.
-const LOOKS_LIKE = { jwt: 'a JWT', time: 'a timestamp', ids: 'a UUID', json: 'JSON', url: 'a URL', cron: 'a cron schedule', base64: 'Base64', color: 'a colour', number: 'a number', chmod: 'a file mode', escape: 'escaped text', curl: 'a curl command', cidr: 'an IP address', yaml: 'YAML', csv: 'CSV', sql: 'SQL', xml: 'XML', units: 'a size or duration', chars: 'hidden characters', cert: 'a certificate', bcrypt: 'a bcrypt hash', image: 'a data URI', cssunits: 'a CSS length' }
+const LOOKS_LIKE = { jwt: 'a JWT', time: 'a timestamp', objectid: 'a MongoDB ObjectId', ids: 'a UUID', json: 'JSON', url: 'a URL', cron: 'a cron schedule', base64: 'Base64', color: 'a colour', number: 'a number', chmod: 'a file mode', escape: 'escaped text', curl: 'a curl command', cidr: 'an IP address', yaml: 'YAML', csv: 'CSV', sql: 'SQL', xml: 'XML', units: 'a size or duration', chars: 'hidden characters', cert: 'a certificate', bcrypt: 'a bcrypt hash', image: 'a data URI', cssunits: 'a CSS length' }
 const byId = new Map(TOOLS.map((tool) => [tool.id, tool]))
 const built = new Map()
 

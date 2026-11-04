@@ -3,6 +3,7 @@
 import { base64ToBytes, bytesToText } from './tools/codec.js'
 import { parseCron } from './tools/cron.js'
 import { guessDelimiter, parseCsv } from './tools/csv.js'
+import { parseObjectId } from './tools/objectid.js'
 import { tokenizeXml } from './tools/xml.js'
 import { parseYaml } from './tools/yaml.js'
 
@@ -38,6 +39,14 @@ function isJson(text) {
   try {
     JSON.parse(text)
     return true
+  } catch {
+    return false
+  }
+}
+
+function isObjectId(text) {
+  try {
+    return parseObjectId(text) !== null
   } catch {
     return false
   }
@@ -107,6 +116,7 @@ export function detect(value) {
   if (SQL.test(text)) return 'sql'
   if (JWT.test(text)) return 'jwt'
   if (UUID.test(text) || ULID.test(text)) return 'ids'
+  if (isObjectId(text)) return 'objectid'
   if (IPV4_CIDR.test(text) || IPV6_CIDR.test(text)) return 'cidr'
   if (TIMESTAMP.test(text) || ISO_DATE.test(text)) return 'time'
   if (HEX_COLOR.test(text) || COLOR_FN.test(text)) return 'color'

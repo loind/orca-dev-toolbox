@@ -113,6 +113,7 @@ input.flags { width: 64px; flex: none; }
 .field:has(.flags) { flex: none; }
 textarea:focus, input:focus, select:focus, button:focus-visible, input.search:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
 
+.time-parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .bar, .inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .segmented { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); }
 .check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted-fg); cursor: pointer; padding: 4px 0; }

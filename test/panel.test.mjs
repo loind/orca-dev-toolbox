@@ -107,7 +107,8 @@ test('every tool opens and produces output without errors', async () => {
     sql: ['textarea', 'select a from t where x = 1 and y = 2', /WHERE x = 1\n  AND y = 2/],
     cert: ['textarea', CERT, /api\.example\.com/],
     jsx: ['textarea', '<div class="a"><br></div>', /<div className="a"><br \/><\/div>/],
-    cssunits: ['input', '32px', /2rem/]
+    cssunits: ['input', '32px', /2rem/],
+    objectid: ['input', '507f191e810c19729de860ea', /2012-10-17T20:46:22\.000Z/]
   }
   for (const tool of TOOLS) {
     await frame.locator('#search').fill(tool.title)
@@ -215,6 +216,204 @@ test('copy buttons copy, or fall back without throwing', async () => {
   const copy = frame.locator('[data-view="json"] .block .copy')
   await copy.click()
   await frame.waitForFunction(() => /Copied|Select/.test(document.querySelector('[data-view="json"] .block .copy').textContent))
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
+test('MongoDB ObjectId: id and local time stay in sync, the sample query follows, bad fields give errors', async () => {
+  const { page, frame, errors } = await openPanel(browser)
+  await frame.locator('#search').fill('objectid')
+  await frame.locator('#search').press('Enter')
+  const view = frame.locator('[data-view="objectid"]')
+  const id = view.getByLabel('ObjectId', { exact: true })
+  const field = (name) => view.getByLabel(name, { exact: true })
+  const command = (hex) => `db.collection.find({ _id: { $gt: ObjectId("${hex}") } })`
+
+  // Opening the tool shows the current time, rounded down to the second.
+  const opened = await id.inputValue()
+  assert.match(opened, /^[0-9a-f]{8}0{16}$/)
+  assert.ok(Math.abs(parseInt(opened.slice(0, 8), 16) - Date.now() / 1000) < 60)
+  assert.equal(await field('Year').inputValue(), String(new Date(parseInt(opened.slice(0, 8), 16) * 1000).getFullYear()))
+
+  // REQ-019, REQ-023, REQ-024: an ObjectId fills the six fields and the rows.
+  await id.fill('507f191e810c19729de860ea')
+  assert.equal(await field('Year').inputValue(), '2012')
+  assert.equal(await field('Second').inputValue(), '22')
+  const rows = await view.locator('.rows').textContent()
+  for (const text of ['ObjectId("507f191e810c19729de860ea")', '2012-10-17T20:46:22.000Z', '1350506782', command('507f191e810c19729de860ea')]) {
+    assert.ok(rows.includes(text), text)
+  }
+  const offset = rows.match(/GMT[+-]\d{2}:\d{2}/)?.[0]
+  assert.ok(offset)
+  assert.ok((await view.locator('.field-label', { hasText: 'Local time' }).textContent()).includes(offset))
+  assert.ok((await view.getByRole('group').getAttribute('aria-label')).includes(offset))
+  const commandRow = view.locator('.row', { hasText: 'db.collection.find' })
+  assert.equal(await commandRow.locator('button.copy').count(), 1)
+  await commandRow.locator('button.copy').click()
+  await frame.waitForFunction(() => [...document.querySelectorAll('[data-view="objectid"] .row')].some((row) => /db\.collection/.test(row.textContent) && /Copied|Select/.test(row.querySelector('.copy').textContent)))
+
+  // REQ-020, REQ-023: a field rebuilds the ObjectId and the sample query.
+  await field('Second').fill('23')
+  assert.equal(await id.inputValue(), '507f191f0000000000000000')
+  assert.ok((await view.locator('.rows').textContent()).includes(command('507f191f0000000000000000')))
+  await field('Hour').fill('0')
+  await field('Hour').fill('')
+  assert.match(await view.locator('.error').textContent(), /Hour is empty/)
+
+  // REQ-022: no silent date change; every bad field is named.
+  await field('Hour').fill('9')
+  await field('Month').fill('2')
+  await field('Day').fill('30')
+  assert.match(await view.locator('.error').textContent(), /no day 30/)
+  for (const [name, value, message] of [['Month', '13', /Month/], ['Second', '1.5', /Second/], ['Hour', '24', /Hour/], ['Year', '2107', /2106/], ['Year', '1968', /Year/], ['Year', '1969', /1970/], ['Day', '1e3', /Day/], ['Day', '-0', /Day/]]) {
+    for (const [other, text] of [['Hour', '9'], ['Minute', '0'], ['Second', '0'], ['Year', '2026'], ['Month', '2'], ['Day', '3']]) await field(other).fill(text)
+    await field(name).fill(value)
+    assert.match(await view.locator('.error').textContent(), message, `${name}=${value}`)
+  }
+
+  // Hostile text in the ObjectId field: a clear error, no script error, no horizontal scroll.
+  for (const text of ['x'.repeat(100000), '__proto__', '"><img src=x onerror=alert(1)>', '😀\u0000\u202e', `ObjectId("507f191e810c19729de860ea')`, '   ']) {
+    await id.fill(text)
+    assert.equal(await view.locator('.error').count(), text.trim() ? 1 : 0)
+    assert.equal(await view.locator('img').count(), 0)
+    assert.equal(await frame.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  }
+  await id.fill('ObjectId("507F191E810C19729DE860EA")')
+  assert.equal(await field('Year').inputValue(), '2012')
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
+test('MongoDB ObjectId: a pasted ObjectId opens the tool; layout fits 300 px in both themes', async () => {
+  for (const theme of ['light', 'dark']) {
+    const { page, frame, errors } = await openPanel(browser, { theme, width: 300 })
+    await paste(frame, '#search', 'ObjectId("507f191e810c19729de860ea")')
+    await frame.waitForSelector('[data-view="objectid"]:not([hidden])')
+    const view = frame.locator('[data-view="objectid"]')
+    assert.match(await view.textContent(), /2012-10-17T20:46:22\.000Z/)
+    assert.equal(await frame.locator('.tool-header .tile svg').count(), 1)
+    assert.equal(await frame.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+    // The three-column grid: three fields share a row.
+    const tops = await view.locator('.time-parts input').evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().top)))
+    assert.deepEqual([tops[0] === tops[1], tops[1] === tops[2], tops[2] === tops[3], tops[3] === tops[4], tops[4] === tops[5]], [true, true, false, true, true])
+    await view.getByLabel('Month', { exact: true }).fill('2')
+    await view.getByLabel('Day', { exact: true }).fill('30')
+    assert.equal(await frame.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+    assert.deepEqual(errors, [])
+    await page.close()
+  }
+})
+
+// Chromium reads TZ when it starts, so a browser launched with TZ set shows that time zone.
+async function launchIn(timeZone) {
+  const before = process.env.TZ
+  process.env.TZ = timeZone
+  try {
+    return await launch()
+  } finally {
+    if (before === undefined) delete process.env.TZ
+    else process.env.TZ = before
+  }
+}
+
+test('MongoDB ObjectId: Now is the current time floored to the second, in every row', async () => {
+  const { page, frame, errors } = await openPanel(browser)
+  const clock = Date.UTC(2026, 10, 4, 1, 25, 31, 362)
+  // Playwright's clock reaches the panel frame too; the time has milliseconds that Now must drop.
+  await page.clock.setFixedTime(clock)
+  await frame.locator('#search').fill('objectid')
+  await frame.locator('#search').press('Enter')
+  const view = frame.locator('[data-view="objectid"]')
+  await view.getByLabel('ObjectId', { exact: true }).fill('507f191e810c19729de860ea')
+  await view.getByRole('button', { name: 'Now', exact: true }).click()
+  const rows = await view.locator('.rows').textContent()
+  assert.equal(await view.getByLabel('ObjectId', { exact: true }).inputValue(), '6aea898b0000000000000000')
+  for (const text of ['ObjectId("6aea898b0000000000000000")', '2026-11-04T01:25:31.000Z', '1793755531000', '1793755531']) assert.ok(rows.includes(text), text)
+  assert.ok(!rows.includes('362'))
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
+test('MongoDB ObjectId: a repeated hour stays in the offset shown, and the label follows the shown date (America/New_York)', async () => {
+  const ny = await launchIn('America/New_York')
+  try {
+    const { page, frame, errors } = await openPanel(ny)
+    await frame.locator('#search').fill('objectid')
+    await frame.locator('#search').press('Enter')
+    const view = frame.locator('[data-view="objectid"]')
+    const id = view.getByLabel('ObjectId', { exact: true })
+    const field = (name) => view.getByLabel(name, { exact: true })
+    const label = () => view.locator('.field-label', { hasText: 'Local time' }).textContent()
+
+    // The label is the offset of the displayed date, not of today.
+    await id.fill('507f191e810c19729de860ea')
+    assert.equal(await label(), 'Local time (GMT-04:00)')
+    assert.equal(await field('Hour').inputValue(), '16')
+    await id.fill('6955b9000000000000000000')
+    assert.equal(await label(), 'Local time (GMT-05:00)')
+    assert.equal(await field('Year').inputValue(), '2025')
+
+    // 2025-11-02 01:30 happens twice. The second one is 06:30Z (GMT-05:00).
+    await id.fill('6906fa68')
+    assert.match(await view.locator('.error').textContent(), /24 hex/)
+    await id.fill('6906fa680000000000000000')
+    assert.equal(await label(), 'Local time (GMT-05:00)')
+    assert.deepEqual([await field('Hour').inputValue(), await field('Minute').inputValue()], ['1', '30'])
+    assert.ok((await view.locator('.rows').textContent()).includes('2025-11-02T06:30:00.000Z'))
+    await field('Second').fill('1')
+    assert.equal(await id.inputValue(), '6906fa690000000000000000')
+    assert.equal(await label(), 'Local time (GMT-05:00)')
+    assert.ok((await view.locator('.rows').textContent()).includes('2025-11-02T06:30:01.000Z'))
+    await field('Minute').fill('45')
+    assert.equal(await id.inputValue(), '6906fded0000000000000000')
+    assert.equal(await label(), 'Local time (GMT-05:00)')
+    // The first one is 05:30Z (GMT-04:00) and stays there.
+    await id.fill('6906ec580000000000000000')
+    assert.equal(await label(), 'Local time (GMT-04:00)')
+    await field('Second').fill('1')
+    assert.equal(await id.inputValue(), '6906ec590000000000000000')
+    assert.equal(await label(), 'Local time (GMT-04:00)')
+    // Leaving the repeated hour reads the new time with its own offset.
+    await field('Hour').fill('3')
+    assert.equal(await label(), 'Local time (GMT-05:00)')
+    assert.equal(await id.inputValue(), '690716890000000000000000')
+    // A time the clock skips is an error, and the ObjectId is not changed.
+    await field('Year').fill('2026')
+    await field('Month').fill('3')
+    await field('Day').fill('8')
+    await field('Hour').fill('2')
+    await field('Minute').fill('30')
+    assert.match(await view.locator('.error').textContent(), /does not exist/)
+    assert.deepEqual(errors, [])
+    await page.close()
+  } finally {
+    await ny.close()
+  }
+})
+
+test('MongoDB ObjectId: a half-typed number says it is not a whole number', async () => {
+  const { page, frame, errors } = await openPanel(browser)
+  await frame.locator('#search').fill('objectid')
+  await frame.locator('#search').press('Enter')
+  const view = frame.locator('[data-view="objectid"]')
+  const year = view.getByLabel('Year', { exact: true })
+  await year.fill('')
+  await year.pressSequentially('20e')
+  assert.equal(await year.evaluate((node) => node.validity.badInput), true)
+  assert.match(await view.locator('.error').textContent(), /^Year is not a whole number\.?$/)
+  await year.fill('')
+  assert.match(await view.locator('.error').textContent(), /Year is empty/)
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
+test('MongoDB ObjectId sits in Inspect right after Timestamp (REQ-026)', async () => {
+  const at = TOOLS.findIndex((tool) => tool.id === 'time')
+  assert.equal(TOOLS[at + 1].id, 'objectid')
+  assert.equal(TOOLS[at + 1].group, 'Inspect')
+  const { page, frame, errors } = await openPanel(browser)
+  const inspect = await frame.locator('.group', { has: frame.locator('h2', { hasText: /^Inspect$/ }) }).locator('.tool-item .tool-name').allTextContents()
+  assert.equal(inspect[inspect.indexOf('Timestamp') + 1], 'MongoDB ObjectId')
   assert.deepEqual(errors, [])
   await page.close()
 })

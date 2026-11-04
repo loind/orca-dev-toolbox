@@ -35,6 +35,10 @@ test('recognises each kind of pasted value', () => {
     ['Xin ch\\u00e0o', 'escape'],
     ["curl -X POST https://x.dev -d 'a=1'", 'curl'],
     ['01ARYZ6S41TSV4RRFFQ69G5FAV', 'ids'],
+    ['6ae8c1900000000000000000', 'objectid'],
+    ['ObjectId("672f7b4e9d1c2a0012345678")', 'objectid'],
+    ["new ObjectId('672f7b4e9d1c2a0012345678')", 'objectid'],
+    ['{ "$oid": "672f7b4e9d1c2a0012345678" }', 'objectid'],
     ['10.0.0.0/8', 'cidr'],
     ['192.168.1.10', 'cidr'],
     ['192.168.1.10 255.255.255.0', 'cidr'],
@@ -62,7 +66,7 @@ test('recognises each kind of pasted value', () => {
 })
 
 test('leaves ordinary words and broken values to the search', () => {
-  for (const value of ['', '   ', 'json', 'password', 'base64 encode', '{not json', 'hash', '12345', 'eyJhbGciOi', '#hashtag', 'rgb', 'Tom & Jerry', 'Hello, world.\nHow are you?', 'note: remember this', '1.2.3', 'select', 'Selected items', '<b>not closed', 'pm', 'P', '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----']) {
+  for (const value of ['', '   ', 'json', 'password', 'base64 encode', '{not json', 'hash', '12345', 'eyJhbGciOi', '#hashtag', 'rgb', 'Tom & Jerry', 'Hello, world.\nHow are you?', 'note: remember this', '1.2.3', 'select', 'Selected items', '<b>not closed', 'pm', 'P', '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----', '6ae8c19000000000000000', 'ObjectId("6ae8")']) {
     assert.equal(detect(value), null, value)
   }
 })
