@@ -33,21 +33,37 @@ C4Container
 **Trade-off:** JSON có khóa như `spring.datasource.url` vẫn dùng được cho `dotenv`, `docker`, `compose` nhưng không `export`.
 
 ### D2 - YAML: dùng lại `parseYaml` của gói trước
-**Chosen:** `docker.js` và `env.js` gọi `parseYaml` thay cho `load`. Nếu `documents > 1` thì ném lỗi "one document".
-Thông báo lỗi YAML giữ dạng `Not valid YAML: …` như hôm nay.
+**Chosen:** `docker.js` và `env.js` gọi `parseYaml` thay cho `load`. Nếu `documents > 1` thì ném lỗi có chữ "one document".
+Thông báo lỗi YAML là thông báo của `parseYaml` (`Not valid YAML (line L, column C): …`), không bọc thêm lần nữa (`composeToRun` bỏ `try/catch` cũ).
+`env.js` trước đây để lỗi thô của js-yaml thoát ra; nay dùng thông báo của `parseYaml`. Chỉ đầu vào hợp lệ được đảm bảo giữ đầu ra y hệt.
 **Because:** `parseYaml` đã có `jsonLength` (giới hạn 12 triệu ký tự in ra, tính cả alias) và đã được hai reviewer kiểm.
 **Rejected:** viết giới hạn riêng cho hai tool: lặp lại logic đã kiểm.
 
 ### D3 - Option bị chèn trong `docker run`: từ chối `image` và `container_name` bắt đầu bằng `-`
-**Chosen:** ném lỗi. Tên image và container hợp lệ của Docker không bắt đầu bằng `-`. Không dùng `--` trước image vì
-các tham số sau image là lệnh của container và `docker run -- IMAGE` đổi cách đọc cờ.
+**Chosen:** ném lỗi. Tên image và container hợp lệ của Docker không bắt đầu bằng `-`. Với `container_name`, Docker thực ra đọc `--name --rm` là
+giá trị của `--name`, nên chỉ `image` là chèn cờ thật; vẫn từ chối cả hai (và tên service khi nó làm tên container) vì tên đó không hợp lệ.
+Không dùng `--` trước image vì `docker run -- IMAGE` đổi cách đọc cờ.
 **Rejected:** bỏ im giá trị: người dùng không biết nó mất.
 
 ### D4 - Regex trong JSONPath: kiểm tra bảo thủ chứ không chạy với timeout
-**Chosen:** `safeRegExp(source, flags)` từ chối mẫu dài hơn 200 ký tự và mọi nhóm bị lượng từ bao khi nhóm đó chứa lượng từ
-hoặc `|`; chuỗi so sánh dài hơn 10.000 ký tự coi là không khớp. Dùng chung cho `=~`, `match()`, `search()`.
-**Because:** JavaScript không hủy được một regex đang chạy; panel không có worker (CSP). Giới hạn bảo thủ chặn các dạng backtracking
-phổ biến mà vẫn giữ được các mẫu thông thường. Giới hạn đã biết: một số mẫu tuyến tính hợp lệ như `(a|b)*` cũng bị từ chối.
+**Chosen:** `safeRegExp(source, flags)` áp quy tắc sau, dùng chung cho `=~`, `match()` và `search()`.
+Một bộ tách từ nhỏ quét mẫu: bỏ qua ký tự thoát (`\x`) và lớp ký tự (`[...]`), nhận ra nhóm `(...)` (mọi loại nhóm: `(?:`,
+lookahead, nhóm đặt tên) và lượng từ (`*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`, kèm `?` lười).
+- **Lặp không giới hạn:** `*`, `+`, `{n,}`. **Lặp nhiều lần:** `{n}` hoặc `{n,m}` với `m` ≥ 2. `?`, `{0,1}` và `{1}` không phải lặp.
+- Một nhóm là **nhóm lặp** nếu ngay sau nó là một lặp không giới hạn hoặc một lặp nhiều lần.
+- **Từ chối** khi: (a) một nhóm lặp không giới hạn có trong thân (ở mọi độ sâu) bất kỳ lượng từ nào, kể cả `?`, hoặc phép chọn `|`;
+  (b) một nhóm lặp nhiều lần có trong thân một lặp không giới hạn; (c) mẫu dài hơn 200 ký tự (đo trên mẫu của người dùng,
+  không phải mẫu đã bọc `^(?:...)$`); (d) mẫu có hơn 4 lặp không giới hạn.
+- Chuỗi dài hơn 2.000 ký tự coi là không khớp, không ném lỗi. Hệ quả đã biết: `!(@.v =~ /x/)` cho chuỗi quá dài là đúng.
+- Mẫu literal `=~` được kiểm tra ngay khi phân tích đường dẫn; mẫu của `match()`/`search()` (có thể đến từ dữ liệu) kiểm tra khi chạy.
+- Thông báo: `This regular expression is not allowed: <lý do>`, với lý do là "too long (200 characters at most)", "a repeated group holds
+  another repeat or a choice (|)" hoặc "too many open-ended repeats (4 at most)".
+- Cờ `g` và `y` giữ nguyên như hôm nay (không thuộc phạm vi).
+**Because:** JavaScript không hủy được một regex đang chạy; panel không có worker (CSP). Quy tắc chặn các dạng backtracking theo hàm mũ
+phổ biến (lặp lồng nhau, chọn trùng trong lặp) mà vẫn giữ được các mẫu thông thường như `^(\d{1,3}\.){3}\d{1,3}$`.
+**Giới hạn đã chấp nhận (nói rõ cho bạn):** đây **không** đảm bảo "không regex nào treo". Dạng đa thức không có nhóm (ví dụ `\w+\w+\w+$`,
+khoảng O(n³)) vẫn được phép ở mức tối đa 4 lặp trên 2.000 ký tự, nên một mẫu bệnh lý vẫn có thể chậm vài giây; một số mẫu tuyến tính hợp lệ
+như `(https?|ftp)+` hoặc `(a|b)*` bị từ chối.
 **Rejected:** Web Worker với timeout (CSP chặn). Viết bộ khớp regex riêng: quá lớn cho phạm vi này.
 
 ### D5 - `push(...spread)`: thay bằng vòng `for`
@@ -64,6 +80,13 @@ phổ biến mà vẫn giữ được các mẫu thông thường. Giới hạn 
 - Đầu ra `.env` có `$(...)` khi `source` file: chỉ ghi nhận (xem Out of scope).
 - Phép thử khai thác của tôi chạy lại ở cuối làm kiểm tra cuối (verifier), thay cho một phiên agent riêng.
 - Documenter chạy ở cuối: README, CHANGELOG, mô tả manifest (44 tool), và hai gói thiết kế.
+
+- Quyết định sau builder check (bạn đổi được): (1) tên biến sai làm cả tab đầu ra thất bại kèm thông báo nêu tên đó, thay vì bỏ qua âm thầm từng biến
+  (với `shell`, shell không `export` được tên có dấu chấm hay gạch ngang, nên báo lỗi rõ tốt hơn mất dữ liệu); khóa ở đầu vào `docker -e` và JSON vẫn
+  được đọc, kiểm khi ghi. (2) Regex JSONPath: mục tiêu là chặn các dạng backtracking theo hàm mũ đã biết cộng giới hạn kích thước; không hứa
+  "không regex nào treo" (xem D4). (3) Chuỗi quá dài so với regex coi là không khớp, không ném lỗi. (4) `image` không phải chuỗi được đổi sang chuỗi.
+  (5) Chỉ từ nguyên vẹn bắt đầu bằng `=` được quote. (6) Độ sâu JSON cũng nằm trong REQ-032 (`descendants` thành vòng lặp). (7) Mọi chỗ semver chép đầu vào
+  vào thông báo đều bị cắt; dữ liệu trả về của `sortVersions` giữ nguyên. (8) Engine không commit, không push, không chạy `npm ci`.
 
 ## Design problems
 
