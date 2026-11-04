@@ -1,11 +1,20 @@
 // Semantic Versioning 2.0.0, with npm's range syntax: ^ ~ x-ranges, hyphen ranges, || and
 // comparator sets.
 
-const VERSION = /^\s*[v=]?\s*(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?\s*$/
+// Matched against the trimmed text: a leading \s* before [v=]? would be quadratic on a long run of spaces.
+const VERSION = /^[v=]?\s*(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+
+// The input as shown in an error: trimmed and cut to 120 UTF-16 units, never in the middle of a surrogate pair.
+export function shown(text) {
+  const t = String(text).trim()
+  if (t.length <= 120) return t
+  const high = t.charCodeAt(119) >= 0xd800 && t.charCodeAt(119) <= 0xdbff
+  return `${t.slice(0, high ? 119 : 120)}…`
+}
 
 export function parseVersion(text) {
-  const m = VERSION.exec(text)
-  if (!m) throw new Error(`"${text.trim()}" is not a semantic version (MAJOR.MINOR.PATCH).`)
+  const m = VERSION.exec(text.trim())
+  if (!m) throw new Error(`"${shown(text)}" is not a semantic version (MAJOR.MINOR.PATCH).`)
   return {
     major: Number(m[1]),
     minor: Number(m[2]),
@@ -43,7 +52,7 @@ const PARTIAL = /^[v=]?\s*(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-([0
 
 function partial(text) {
   const m = PARTIAL.exec(text.trim())
-  if (!m) throw new Error(`"${text}" is not a version or range.`)
+  if (!m) throw new Error(`"${shown(text)}" is not a version or range.`)
   const wild = (part) => part === undefined || /^[xX*]$/.test(part)
   return {
     major: wild(m[1]) ? null : Number(m[1]),
@@ -154,7 +163,7 @@ export function increment(text, kind, preid = 'rc') {
       return formatVersion(v(x.major, x.minor, x.patch, pre))
     }
   }
-  throw new Error(`Unknown increment ${kind}`)
+  throw new Error(`Unknown increment ${shown(kind)}`)
 }
 
 /** Versions sorted by precedence, oldest first; invalid lines are returned separately. */

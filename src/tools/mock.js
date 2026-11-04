@@ -123,7 +123,9 @@ const csvCell = (value) => {
 const sqlValue = (value) => (typeof value === 'number' ? String(value) : typeof value === 'boolean' ? (value ? 'TRUE' : 'FALSE') : `'${String(value).replace(/'/g, "''")}'`)
 const snake = (name) => name.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 
-export function formatRows(rows, format, { table = 'users' } = {}) {
+const SQL_TABLE = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/
+
+export function formatRows(rows, format, { table } = {}) {
   if (!rows.length) return ''
   const fields = Object.keys(rows[0])
   switch (format) {
@@ -134,6 +136,8 @@ export function formatRows(rows, format, { table = 'users' } = {}) {
     case 'csv':
       return [fields.join(','), ...rows.map((row) => fields.map((f) => csvCell(row[f])).join(','))].join('\n')
     case 'sql':
+      if (table === undefined || table === null || table === '') table = 'users'
+      if (typeof table !== 'string' || !SQL_TABLE.test(table)) throw new Error('The table name must be a SQL identifier such as users or public.users.')
       return `INSERT INTO ${table} (${fields.map(snake).join(', ')}) VALUES\n${rows.map((row) => `  (${fields.map((f) => sqlValue(row[f])).join(', ')})`).join(',\n')};`
   }
   throw new Error(`Unknown format ${format}`)

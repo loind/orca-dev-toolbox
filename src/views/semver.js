@@ -1,4 +1,4 @@
-import { compareVersions, describeRange, increment, parseVersion, satisfies, sortVersions } from '../tools/semver.js'
+import { compareVersions, describeRange, increment, parseVersion, satisfies, shown, sortVersions } from '../tools/semver.js'
 import { errorText, field, h, hint, input, output, rows, segmented, set, textarea } from '../ui.js'
 
 export default {
@@ -29,7 +29,7 @@ export default {
           if (!list.value.trim()) return set(result, hint('Prereleases sort before their release: 1.0.0-rc.1 < 1.0.0.'))
           const { sorted: ordered, invalid } = sortVersions(list.value.split('\n'))
           sorted.set(ordered.join('\n'))
-          return set(result, sorted.node, invalid.length ? errorText(`Not versions: ${invalid.join(', ')}`) : null)
+          return set(result, sorted.node, invalid.length ? errorText(`Not versions: ${invalid.map(shown).join(', ')}`) : null)
         }
         const v = version.value.trim()
         const r = range.value.trim()

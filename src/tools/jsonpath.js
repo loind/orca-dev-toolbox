@@ -1,3 +1,5 @@
+import { Regex, withRegexBudget } from './linear-regex.js'
+
 // JSONPath (RFC 9535 in spirit): $.a.b, ['key'], [0], [-1], [*], .*, ..deep, [1:3], [0,2] and
 // filters such as [?(@.price < 10 && @.tags)]. No eval: the panel's CSP forbids it anyway.
 
@@ -200,11 +202,11 @@ function tokenize(text) {
     } else if ((m = /^[@$](\.\.?[\w-]+|\.\*|\[[^\]]*\])*/.exec(rest)) && m[0]) {
       tokens.push({ type: 'path', value: m[0] })
       i += m[0].length
-    } else if ((m = /^(['"])((?:\\.|(?!\1).)*)\1/.exec(rest))) {
+    } else if ((m = /^(['"])((?:\\.|(?!\1)[^\\\n\r\u2028\u2029])*)\1/.exec(rest))) {
       tokens.push({ type: 'literal', value: m[0], literal: m[2].replace(/\\(.)/g, '$1') })
       i += m[0].length
-    } else if ((m = /^\/((?:\\.|[^/])+)\/([gimsuy]*)/.exec(rest))) {
-      tokens.push({ type: 'literal', value: m[0], literal: new RegExp(m[1], m[2]) })
+    } else if ((m = /^\/((?:\\[^]|[^/\\])+)\/([gimsuy]*)/.exec(rest))) {
+      tokens.push({ type: 'literal', value: m[0], literal: new Regex(m[1], m[2]) })
       i += m[0].length
     } else if ((m = /^-?\d+(\.\d+)?([eE][+-]?\d+)?/.exec(rest))) {
       tokens.push({ type: 'literal', value: m[0], literal: Number(m[0]) })
@@ -221,6 +223,22 @@ function tokenize(text) {
 }
 
 const NOTHING = Symbol('nothing')
+
+// Regexes in filters (=~, match(), search()) run in src/tools/linear-regex.js, a matcher that takes time
+// proportional to pattern x subject whatever the pattern, and queryJson gives all the matches of one
+// query a shared work budget, so a pattern from the user or from the data cannot hang the panel.
+// A literal =~ pattern compiles when the path is parsed; match() and
+// search() compile when they run (the pattern may come from the data).
+
+const regexes = new Map()
+function compiled(pattern, full) {
+  const key = `${full ? 'match' : 'search'}:${pattern}`
+  if (!regexes.has(key)) {
+    if (regexes.size >= 200) regexes.clear()
+    regexes.set(key, new Regex(pattern, '', full))
+  }
+  return regexes.get(key)
+}
 
 function evaluate(node, current, root) {
   switch (node.op) {
@@ -249,15 +267,15 @@ function evaluate(node, current, root) {
       }
       if (node.name === 'match' || node.name === 'search') {
         if (typeof args[0] !== 'string') return false
-        const pattern = args[1] instanceof RegExp ? args[1].source : String(args[1])
-        return new RegExp(node.name === 'match' ? `^(?:${pattern})$` : pattern, 'u').test(args[0])
+        const pattern = args[1] instanceof Regex ? args[1].source : String(args[1])
+        return compiled(pattern, node.name === 'match').test(args[0])
       }
       return args[0]
     }
     default: {
       const left = evaluate(node.left, current, root)
       const right = evaluate(node.right, current, root)
-      if (node.op === '=~') return typeof left === 'string' && right instanceof RegExp && right.test(left)
+      if (node.op === '=~') return typeof left === 'string' && right instanceof Regex && right.test(left)
       if (left === NOTHING || right === NOTHING) return node.op === '!=' ? left !== right : node.op === '==' && left === right
       switch (node.op) {
         case '==': return equal(left, right)
@@ -286,8 +304,15 @@ function children(node) {
 }
 
 function descendants(node) {
-  const out = [node]
-  for (const child of children(node)) out.push(...descendants(child))
+  // Depth first, in document order, without recursion: the data may be nested thousands of levels deep.
+  const out = []
+  const stack = [node]
+  while (stack.length) {
+    const next = stack.pop()
+    out.push(next)
+    const kids = children(next)
+    for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i])
+  }
   return out
 }
 
@@ -324,7 +349,12 @@ function select(steps, nodes, root) {
     const next = []
     for (const node of current) {
       const targets = step.type === 'deep' ? descendants(node) : [node]
-      for (const target of targets) for (const s of step.selectors) next.push(...apply(s, target, root))
+      for (const target of targets) {
+        for (const s of step.selectors) {
+          const found = apply(s, target, root)
+          for (let i = 0; i < found.length; i++) next.push(found[i])
+        }
+      }
     }
     current = next
   }
@@ -333,5 +363,6 @@ function select(steps, nodes, root) {
 
 /** Matches of `path` in `data`, each { value, path }. */
 export function queryJson(data, path) {
-  return select(parsePath(path), [{ value: data, path: '$' }], data)
+  const steps = parsePath(path)
+  return withRegexBudget(() => select(steps, [{ value: data, path: '$' }], data))
 }

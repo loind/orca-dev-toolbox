@@ -165,7 +165,7 @@ button.copy.done { color: var(--fg); border-color: var(--ring); }
 
 .subhead { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--muted-fg); }
 .hint { margin: 0; color: var(--muted-fg); font-size: 12px; }
-.error { margin: 0; color: var(--danger); font-size: 12px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); border-radius: var(--radius); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.error { margin: 0; overflow-wrap: anywhere; color: var(--danger); font-size: 12px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); border-radius: var(--radius); background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .sentence { margin: 0; font-size: 15px; font-weight: 600; }
 .result > * + * { margin-top: 10px; }
 .result:empty { display: none; }
