@@ -1,6 +1,7 @@
 // `docker run` commands as Compose services, and Compose services back as `docker run`.
-import { dump, load } from 'js-yaml'
+import { dump } from 'js-yaml'
 import { shellWords } from './curl.js'
+import { parseYaml } from './yaml.js'
 
 // Flags that take a value, by every spelling docker accepts.
 const FLAGS = {
@@ -120,16 +121,19 @@ export function parseDockerRun(text) {
   return { image, command: words.slice(i + 1), options, switches, unknown }
 }
 
-function serviceName(run, taken) {
+// `next` remembers, for each base name, the number to try next, so many commands with one image stay fast.
+function serviceName(run, taken, next) {
   const base = (run.options.name?.[0] ?? run.image.split('/').pop().split(/[:@]/)[0]).toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || 'app'
   let name = base
-  for (let n = 2; taken.has(name); n++) name = `${base}-${n}`
+  let n = next.get(base) ?? 2
+  for (; taken.has(name); n++) name = `${base}-${n}`
+  if (name !== base) next.set(base, n)
   taken.add(name)
   return name
 }
 
 function keyValues(list) {
-  const out = {}
+  const out = Object.create(null)
   for (const item of list) {
     const eq = item.indexOf('=')
     if (eq === -1) out[item] = null
@@ -222,12 +226,13 @@ export function runToCompose(text) {
   const runs = commands(text).map(parseDockerRun)
   if (!runs.length) throw new Error('Paste a docker run command.')
   const taken = new Set()
-  const services = {}
+  const next = new Map()
+  const services = Object.create(null)
   const notes = []
   const volumes = new Set()
   const networks = new Set()
   for (const run of runs) {
-    const name = serviceName(run, taken)
+    const name = serviceName(run, taken, next)
     const service = toService(run)
     services[name] = service
     for (const volume of service.volumes ?? []) {
@@ -245,7 +250,8 @@ export function runToCompose(text) {
   return { yaml, services: runs.length, notes }
 }
 
-const quote = (value) => (/^[\w@%+=:,./-]+$/.test(value) ? value : `'${String(value).replace(/'/g, `'\\''`)}'`)
+// A word that starts with `=` is quoted too: zsh expands `=ls` to the path of ls.
+const quote = (value) => (/^(?!=)[\w@%+=:,./-]+$/.test(value) ? value : `'${String(value).replace(/'/g, `'\\''`)}'`)
 
 function entries(value) {
   if (!value) return []
@@ -255,18 +261,21 @@ function entries(value) {
 
 /** `docker run` commands for each service of a Compose file. */
 export function composeToRun(text) {
-  let doc
-  try {
-    doc = load(text)
-  } catch (error) {
-    throw new Error(`Not valid YAML: ${error.reason ?? error.message}`)
-  }
+  const { value: doc, documents } = parseYaml(text)
+  if (documents > 1) throw new Error('Paste one document: a Compose file is one document, not several separated by ---.')
   const services = doc?.services
   if (!services || typeof services !== 'object') throw new Error('No services: section found.')
   const notes = []
-  const out = Object.entries(services).map(([name, s]) => {
+  const out = Object.entries(services).map(([name, service]) => {
+    const s = service ?? {}
     if (!s.image) notes.push(`${name}: uses build:, so docker run needs an image built first.`)
-    const args = ['docker', 'run', '-d', '--name', s.container_name ?? name]
+    // docker reads a leading - as an option, so an image or a name that starts with one is refused.
+    const image = s.image == null ? s.image : String(s.image)
+    const containerName = String(s.container_name ?? name)
+    for (const [what, word] of [['image', image], ['container name', containerName]]) {
+      if (word?.startsWith('-')) throw new Error(`${name}: the ${what} "${word}" starts with "-", so docker would read it as an option.`)
+    }
+    const args = ['docker', 'run', '-d', '--name', containerName]
     const add = (flag, list) => list.forEach((value) => args.push(flag, String(value)))
     if (s.restart && s.restart !== 'no') args.push('--restart', s.restart)
     add('-p', (s.ports ?? []).map((p) => (typeof p === 'object' ? `${p.published}:${p.target}${p.protocol && p.protocol !== 'tcp' ? `/${p.protocol}` : ''}` : p)))
@@ -292,7 +301,7 @@ export function composeToRun(text) {
     if (s.tty) args.push('-t')
     if (s.entrypoint) args.push('--entrypoint', [].concat(s.entrypoint).join(' '))
     if (s.depends_on) notes.push(`${name}: depends_on has no docker run equivalent; start its dependencies first.`)
-    args.push(s.image ?? `<${name}-image>`)
+    args.push(image ?? `<${name}-image>`)
     if (s.command) args.push(...(Array.isArray(s.command) ? s.command.map(String) : shellWords(String(s.command))))
     return args.map(quote).join(' ')
   })
