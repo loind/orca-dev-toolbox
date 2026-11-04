@@ -23,7 +23,7 @@
 
 ## Success criteria
 
-- 2 gate phase và gate chung (`npm run build`, `npm test`) xanh trên nhánh merge. Gate chung hiện xanh: 165/165.
+- 2 gate phase và gate chung (`npm run build`, `npm test`) xanh trên nhánh merge. Gate chung hiện xanh: 165/165 (Sửa sau khi build: sau hai phase 218/218; sau khi hợp nhất tool resume token 248/248).
 - Mỗi payload khai thác trong `srs.md` cho ra đầu ra an toàn hoặc thông báo lỗi trong giới hạn thời gian nêu ở đó.
 - Đầu ra cho đầu vào bình thường của 8 tool không đổi.
 - Sau cùng: nhánh được hợp nhất vào `main` và push lên fork. Tôi tự chạy lại các phép thử khai thác làm kiểm tra cuối.

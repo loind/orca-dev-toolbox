@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Decode a JWT, convert a timestamp or format some JSON without leaving [Orca](https://www.onorca.dev)
-or asking an agent. 43 small tools in the right sidebar, all offline.
+or asking an agent. 45 small tools in the right sidebar, all offline.
 
 ![Dev Toolbox in Orca's sidebar](images/cover.png)
 
@@ -26,9 +26,9 @@ Requires Orca 1.4.245 or later.
 ## Usage
 
 Open the panel from the wrench icon in the right sidebar, then paste something into the search
-box. Dev Toolbox recognises JWTs, timestamps, JSON, YAML, CSV, SQL, URLs, cron expressions, curl
-and docker run commands, `.env` lines, certificates, SSH keys, colours, IP ranges, version ranges
-and more, and opens the matching tool with your input.
+box. Dev Toolbox recognises JWTs, timestamps, JSON, YAML, CSV, SQL, URLs, cron expressions, curl and
+docker run commands, `.env` lines, MongoDB ObjectIds and resume tokens, certificates, SSH keys,
+colours, IP ranges, version ranges and more, and opens the matching tool with your input.
 
 You can also type to search (`sha256`, `epoch`, `snake`…). <kbd>Enter</kbd> opens the first result,
 <kbd>Esc</kbd> goes back to the list. Each tool keeps its input while you switch between them.
@@ -36,7 +36,8 @@ You can also type to search (`sha256`, `epoch`, `snake`…). <kbd>Enter</kbd> op
 ## Tools
 
 **Inspect** · JWT (decode, verify and sign HS256/384/512) · Certificate & CSR · SSH Key fingerprints ·
-Timestamp · Cron · Semver ranges · HTTP Status · Subnet / CIDR · Character Inspector
+Timestamp · MongoDB ObjectId · Resume token (MongoDB change stream) · Cron · Semver ranges ·
+HTTP Status · Subnet / CIDR · Character Inspector
 
 **Encode** · Base64 · Image to Base64 · URL · HTML / JSON / Unicode escapes
 

@@ -21,6 +21,7 @@ npm test
     - `MIGHAgEAMBMG` không xuất hiện trong text của trang.
     - Làm lại với khối PGP `-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQOYBF\n-----END PGP PRIVATE KEY BLOCK-----`: kết quả giống hệt, và `lQOYBF` không xuất hiện.
     - Mảng `errors` rỗng.
+  - *Sửa sau khi build: REQ-003 cũng được kiểm qua đường `input` (đặt giá trị vào `#search` rồi bắn sự kiện `input`), cho cả PEM và PGP; ca âm: `PUBLIC KEY` và `CERTIFICATE` vẫn mở tool Certificate. Sáu test thời gian chạy trong Chromium (ba payload × paste/input, mỗi cái dưới 300 ms): `'-----BEGIN ' + 'PRIVATE KEY'.repeat(10000)`, cùng chuỗi đó kết thúc bằng `-----` (vẫn bị chặn), và `'-----BEGIN ' + 'A'.repeat(1000000)`. Gate chạy 14 test.*
 - **Gate:** `node --test test/security/paste-detection.test.mjs`
 - **Depends on:** none
 - **Notes:**
@@ -39,6 +40,8 @@ npm test
     - Bomb 6 tầng: `a0: &a0 ["lol"` ×10 `]`, rồi `a1` đến `a6`, mỗi tầng là mảng 10 alias của tầng trước. Tổng khoảng 370 byte.
     - `parseYaml()` với bomb đó ném lỗi có message chứa "aliases", trong dưới 500 ms.
     - `parseYaml('base: &b {x: 1}\nuse: *b').value` vẫn bằng (deep equal) `{ base: { x: 1 }, use: { x: 1 } }`.
+    - *Sửa sau khi build: giới hạn là 12.000.000 ký tự JSON in ra (`jsonLength`, xem `design.md` D3), không phải 1.000.000 giá trị. Thêm các bomb: lá dài 200 ký tự, khóa dài, số dài (`-1.2345678901234567e-300`), lồng sâu 95 tầng; và các tài liệu hợp lệ vẫn phải đọc được: danh sách 200.001 phần tử, 200.000 dòng, map 200.000 khóa, danh sách 999.990 phần tử, 100.000 dòng × 10 số. Gate chạy 17 test.*
+    - *Sửa sau khi build: test bcrypt: hash `$2a$`/`$2y$` cost 16 bị từ chối, cost 15 không bị từ chối vì cost (khoảng 2 s, timeout 20 s); hook `after` kết thúc tiến trình để bản bcrypt hỏng cho kết quả đỏ thay vì treo `node --test`.*
   - REQ-005: Test. `pxToRemInCss('a{content:"' + '1'.repeat(2000) + '"}')` trả về dưới 200 ms (code cũ mất khoảng 4 s). Các test hiện có trong `test/tools/cssunits.test.mjs` vẫn pass.
   - REQ-006: Test.
     - `verifyPassword('x', '$2b$31$' + 'a'.repeat(53))` và `verifyPassword('x', '$2b$16$' + 'a'.repeat(53))` reject trong dưới 100 ms, với message chứa "cost".
@@ -71,6 +74,7 @@ npm test
     - `curl https://x.example/c --json '{"note":"=@/etc/passwd"}'` cho ra `http POST https://x.example/c 'note=\=@/etc/passwd'`.
     - `curl https://x.example/c -F 'n==@x'` cho ra một item `'n=\=@x'`.
     - `curl https://x.example/c -F 'file=@a.png'` vẫn cho ra `http --multipart POST https://x.example/c file@a.png`.
+    - *Sửa sau khi build: đã chạy lại trên code: mọi ví dụ trên cho đúng đầu ra ghi ở đây. Thêm: `curl https://x.example/c -H '--output=/tmp/x: a'` cho `http -- GET https://x.example/c '--output\=/tmp/x:a'`; `-u '-x:y'` cho `http --auth=-x:y GET …`; `-X 'a b'` bị từ chối; tên item có backslash đứng trước `: ; = @` bị từ chối (xem `design.md` D5). Gate chạy 9 test, sau vòng 2 là 10.*
   - REQ-009: Test.
     - Với JSON có key (viết dạng chuỗi JS) ``id`\n}\nfunc init() { println("x") }\ntype Z struct {\n\tB int `json:"b`` và key `user_id`, `jsonToTypes(…, 'go')` không có dòng nào bắt đầu bằng `func` hoặc `type Z`.
     - Tag của key lạ là `JSON.stringify('json:' + JSON.stringify(key))`.
@@ -108,8 +112,9 @@ npm test
     - Panel test: checkbox "Escape backslashes (MySQL, MariaDB)" chỉ hiện khi chọn Lines → SQL IN.
   - REQ-017: Test. Panel test: chọn Lines → SQL IN, checkbox tắt, nhập `bob\`. View hiện hint chứa "MySQL". Bật checkbox thì hint biến mất, và kết quả có `bob\\`.
   - REQ-027: Test.
-    - `htmlToJsx('<window.alert>x</window.alert>')` không chứa `window.alert` và vẫn chứa `x`.
+    - `htmlToJsx('<window.alert>x</window.alert>')` không chứa `window.alert` và vẫn chứa `x`. *Sửa sau khi build: đầu ra là `<>\n  x\n</>`: nội dung gốc không phải đúng một phần tử thì được bọc trong fragment (xem `design.md` D7).*
     - `htmlToJsx('<p><window.alert><b>y</b></window.alert></p>')` bằng `<p><b>y</b></p>`.
+  - *Sửa sau khi build: Phase 4 thêm các test chạy mã sinh ra bằng `esbuild` và `node:vm` với `pwn`/`alert`/`fetch` là hàm bẫy, trên các payload HOSTILE (kể cả text không có thẻ, comment ở gốc, thẻ đóng lạc) và fuzz có seed; test cho `goTag` với các key `x" xml:"y`, `a\b`, `a\nb`; test method `GET2` bị từ chối cho HTTPie. Gate chạy 31 test.*
 - **Gate:** `node --test test/security/generated-markup-sql.test.mjs`
 - **Depends on:** Phase 3
 - **Notes:**
@@ -153,6 +158,8 @@ npm test
     - `TOOLS` trong `src/registry.js` có `objectid` ngay sau `time`, với `group: 'Inspect'`.
     - Map `inputs` trong `test/panel.test.mjs` có case `objectid`.
     - Các panel test hiện có (danh sách tool đủ, không cuộn ngang ở 360 px, hai theme, `errors` rỗng) pass.
+    - *Sửa sau khi build: vòng 1 không có test nào kiểm vị trí và nhóm nên đột biến chuyển `objectid` đi chỗ khác vẫn xanh (qc FAIL REQ-026); vòng 2 thêm test kiểm `objectid` ngay sau `time` và `group: 'Inspect'`.*
+  - *Sửa sau khi build: ca bổ sung: ô Year local nhận 1969–2106; lặp giờ (New York 2025-11-02 01:30 GMT-05:00 sửa Second thành 1 vẫn ở GMT-05:00); nút Now làm tròn xuống giây; `20e` trong Year cho `Year is not a whole number.`; `objectid` ở nhóm Inspect nằm trước `resumetoken`. Test `detect()` trên 1 MB có ngưỡng 2 s (không phải 500 ms). Gate chạy 13 test.*
 - **Gate:** `node --test test/tools/objectid.test.mjs`
 - **Depends on:** Phase 1
 - **Notes:**
@@ -160,5 +167,5 @@ npm test
   - Làm theo `design.md` D11 và D12, và các mục ObjectId trong "Agent's calls".
   - Phase này sửa `src/detect.js` và `src/panel.js`, giống phase 1, nên phải chạy sau phase 1. Vì `panel/index.html` dùng chung, nên chạy sau cả phase 4.
   - Panel test dùng `getByLabel(…, { exact: true })`, vì nhãn "Second" cũng khớp nút "Copy Unix seconds".
-  - Test giờ local chỉ so sánh giây và năm, nên không phụ thuộc time zone. Chạy thử với `TZ=UTC`, `TZ=America/New_York` và `TZ=Asia/Kolkata`.
+  - Test giờ local chỉ so sánh giây và năm, nên không phụ thuộc time zone. Chạy thử với `TZ=UTC`, `TZ=America/New_York` và `TZ=Asia/Kolkata`. *Sửa sau khi build: ma trận đã chạy gồm cả `Australia/Lord_Howe`; test nhãn offset chạy trong một ngữ cảnh trình duyệt có DST bằng `launchIn(timeZone)` (đặt `process.env.TZ` trước khi mở Chromium).*
   - Sau khi gate xanh: một commit cho phase, rồi `git push origin main` (D13).

@@ -66,15 +66,25 @@ bản chạy dưới 4 ms với 100 KB.
 - Chạy detect trong worker: CSP chặn worker.
 
 **Trade-off:** DOCTYPE có internal subset mà trong giá trị entity có `]` sẽ bị cắt token sớm. Bố cục bị lệch
-nhưng không báo lỗi. Trường hợp này hiếm.
+nhưng không báo lỗi. Trường hợp này hiếm. *Sửa sau khi build: đã kiểm trên code: `<!DOCTYPE n [<!ENTITY a "b]c">]>` cho token `doctype` rồi `text`.*
 
-### D3 - YAML: đếm giá trị sau `loadAll`, giới hạn 1.000.000
-**Chosen:** duyệt kết quả của `loadAll` bằng một stack, đếm cả các alias dùng chung. Vượt 1.000.000 thì ném
-lỗi, và `parseYaml` bọc lỗi đó thành `Not valid YAML: … aliases …`. Lỗi được ném trong `parseYaml`, nên mọi nơi
-gọi đều được bảo vệ: view, `yamlToJson`, `sortKeys`, và `isYaml` trong `detect`.
+### D3 - YAML: tính độ dài JSON sẽ in ra sau `loadAll`, giới hạn 12.000.000 ký tự
+**Chosen:** `jsonLength(root, limit)` trong `src/tools/yaml.js` tính chính xác độ dài của
+`JSON.stringify(value, null, 2)` mà không dựng chuỗi (một stack và một mảng độ sâu, vòng `for`, dừng khi vượt `limit`),
+tính cả các alias dùng chung mỗi lần chúng được dùng. Vượt `MAX_OUTPUT = 12_000_000` thì ném lỗi
+`The document would print as more than 12000000 characters of JSON (aliases count each time they are used).`, và `parseYaml`
+bọc lỗi đó thành `Not valid YAML: …`. Lỗi được ném trong `parseYaml`, nên mọi nơi gọi đều được bảo vệ: view,
+`yamlToJson`, `sortKeys`, và `isYaml` trong `detect`.
+*Sửa sau khi build: bản thiết kế chọn đếm giá trị với giới hạn 1.000.000. Phase 2 phải làm lại ba vòng: (1) `push(...spread)` ném `RangeError` với
+danh sách từ khoảng 125.000 phần tử; (2) đếm giá trị cộng độ dài chữ / 16 vẫn bị bomb 2 KB (7 tầng, mỗi lá 200 ký tự) làm Chromium đứng 12 s,
+và bomb 1,2 KB nở ra 165 MB JSON vì độ thụt lề theo độ sâu, tên khóa và số dài không được tính; (3) tính độ dài in ra chính xác.
+Hệ quả đã biết: ngưỡng là 12 triệu ký tự in ra, không phải 1.000.000 giá trị, nên tài liệu nở 1,18–1,65 triệu giá trị qua alias vẫn được nhận;
+thông báo nhắc alias cả khi không có alias; ở sát ngưỡng, view cần 2–5 s trong Chromium (tương đương một YAML thường cùng kích thước);
+một danh sách hơn khoảng 2,4 triệu phần tử, 300.000 dòng × 10 số hoặc một chuỗi hơn 12 MB bị từ chối dù hợp lệ. Test `input-freeze.test.mjs` có
+property test (400 tài liệu ngẫu nhiên có seed, `jsonLength` ≥ độ dài thật và ≤ 1,05 × + 100).*
 **Rejected:**
 - `maxAliases` của js-yaml: chỉ 70 alias đã nở ra 10^7 giá trị.
-- Chỉ giới hạn độ dài đầu ra: lúc đó `JSON.stringify` đã chạy xong rồi.
+- Chỉ giới hạn độ dài đầu ra sau khi in: lúc đó `JSON.stringify` đã chạy xong rồi (`jsonLength` tính độ dài trước khi in).
 
 ### D4 - bcrypt: verify từ chối cost lớn hơn 15
 **Chosen:** `verifyPassword` đọc cost và reject khi cost > 15, trước khi gọi bcryptjs. 15 cũng là mức tối đa
@@ -89,9 +99,17 @@ khi hash. **Rejected:**
 - Target HTTPie ném lỗi khi method không khớp `^[A-Za-z]+$`: "HTTPie only takes letters in a method". HTTPie
   chỉ coi từ đầu tiên là method khi nó gồm toàn chữ cái. Nếu không, HTTPie coi từ đó là URL, nên request và
   credential đi tới host khác. Target `fetch` và `python` không đổi, vì ở đó method đã là chuỗi được quote.
-- Mỗi request item: thêm backslash trước `\ : = @ ;` trong tên, và trước `@` hoặc `=` ở đầu giá trị. Cách này
+- Mỗi request item: thêm backslash trước `: = @ ;` trong tên, và trước `@` hoặc `=` ở đầu giá trị. Cách này
   chặn mọi separator đọc file của HTTPie 3.x: `:@`, `=@`, `:=@`, `==@`. Đã kiểm với HTTPie 3.2.4: `X:\=@f` và
   `note=\=@f` gửi đúng text, không đọc file.
+- *Sửa sau khi build: bản thiết kế escape cả `\` trong tên (thành `\\`). Chạy HTTPie 3.2.4 cho thấy hai backslash vẫn kết thúc tên, và gộp thành một ở tên của body JSON, nên
+  không có cách viết một backslash đứng trước `: ; = @` hoặc ở cuối tên. Code ném lỗi `HTTPie cannot send a backslash before : ; = or @ in a name.`
+  thay vì sinh item sai. Trong giá trị, HTTPie bỏ backslash đứng trước `: ; = @`; giữ nguyên vì giá trị không mở được item khác.*
+- *Sửa sau khi build: item bắt đầu bằng `-` là option injection: `http POST url '--output=/tmp/x'` ghi file (đã chạy với HTTPie 3.2.4; backslash trước dấu `-` không giúp được).
+  Khi có item như vậy, lệnh thành `http [options] [--raw=…] -- METHOD URL items`; `-u` có giá trị bắt đầu bằng `-` thành `--auth=VALUE`.
+  `shellQuote` quote thêm từ bắt đầu bằng `=` (zsh mở rộng `=lệnh`).*
+- *Sửa sau khi build: method chỉ gồm chữ cái được kiểm cả với ký tự lạ như `GET2` (từ chối). `-d '{…}'` không có content type nay thành item form với tên đã escape; 3 lớp
+  đổi so với cũ (item bắt đầu bằng `@`/`=`, tách ở dấu `=` đầu tiên, tên item escape) là các thay đổi chủ ý duy nhất; 20.000 lệnh thường cho đầu ra y hệt ở cả ba target.*
 - Cặp form `-d 'k=v'` được tách theo dấu `=` đầu tiên. Hôm nay phần sau dấu `=` thứ hai bị mất.
 - `-F name=@file` giữ nguyên là upload file, như curl.
 
@@ -115,6 +133,14 @@ khi hash. **Rejected:**
 - Chỉ đưa handler vào arrow function khi giá trị an toàn (REQ-013). Nếu không, bỏ handler.
 - Escape `\` trước khi escape backtick và `${`.
 - Bỏ thẻ có tên chứa `.` (thẻ mở và thẻ đóng), giữ nội dung bên trong (REQ-027).
+- *Sửa sau khi build: Phase 4 phải làm lại ba vòng, vì chuyển từng token một mà không cân bằng thẻ thì dữ liệu hỏng vẫn thành code (`<!--x--><window>alert(1)` → `{/* x */}<window>alert(1)`
+  đọc như `{} < window > alert(1)`; `<br></a><i title="/,pwn(1),/"></i><br>` gọi `pwn`). Code thật dùng một stack tên thẻ đang mở: thẻ đóng khớp một tổ tiên thì đóng các thẻ ở giữa
+  (không phân biệt hoa thường), thẻ đóng không khớp gì bị bỏ ở mọi độ sâu, thẻ còn mở đến hết input được đóng, thẻ đóng viết giống thẻ mở. Nội dung gốc không phải đúng một phần tử
+  (text, comment, `<` lẻ, nhiều phần tử) được bọc trong fragment `<>…</>`: `pwn(1)` thành text, không còn là code. `<style/>` và `<script/>` không tự đóng.
+  Thẻ đóng của raw-text lấy theo `lastIndexOf('</')`. Tên thẻ, tên attribute và tên thuộc tính style phải khớp whitelist (xem REQ-011, REQ-012). Stack dùng bộ đếm theo tên (`openCount`) nên
+  thẻ đóng lạc trên stack sâu là O(1): bản dùng `findLastIndex` mất 10 s với 140 KB.*
+- *Sửa sau khi build: Hệ quả đã biết: HTML lược bỏ thẻ đóng (`<ul><li>a<li>b</ul>`, `<p>`, `<td>`) cho `<li>` lồng nhau (JSX hợp lệ nhưng khác DOM của trình duyệt; bản cũ cho lỗi cú pháp);
+  thẻ đóng của `<style>`/`<script>` chép nguyên văn (`<STYLE>a</style>` không biên dịch); regex `TOKEN` vẫn chạy theo bình phương (`'<a b'.repeat(20000)` mất khoảng 11 s; có từ trước, ngoài phạm vi).*
 
 **Rejected:**
 - Đổi `.` thành `-`: đổi tên thẻ, và tạo một custom element không ai viết.
@@ -122,7 +148,7 @@ khi hash. **Rejected:**
 - Đổi handler thành chuỗi: đổi nghĩa, React không chấp nhận handler là chuỗi.
 
 ### D8 - Snippet ảnh: percent-encode trong data URI, bỏ ký tự trong tên
-**Chosen:** như REQ-015. Data URI cho phép percent-encoding, nên ảnh vẫn hiển thị đúng. Data URI base64 của PNG
+**Chosen:** như REQ-015 (*Sửa sau khi build: tên file còn bỏ thêm backslash và backtick; entity trong data URI vẫn chưa được xử lý*). Data URI cho phép percent-encoding, nên ảnh vẫn hiển thị đúng. Data URI base64 của PNG
 không chứa ký tự nào bị encode, nên không đổi.
 
 ### D9 - SQL IN: checkbox MySQL, mặc định tắt, kèm cảnh báo
@@ -137,9 +163,12 @@ không chứa ký tự nào bị encode, nên không đổi.
 - Từ chối giá trị có `\`: chặn cả trường hợp hợp lệ.
 
 ### D10 - Private key: chặn ngay trong paste handler
-**Chosen:** trong handler `paste` của `#search`, nếu text khớp `/-----BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z0-9 ]*-----/` thì
-`preventDefault()`. Sau đó hiện, trong vùng suggestion (role=alert), câu mà tool Certificate đang dùng:
-"That is a private key. Keep it out of tools and chats; …".
+**Chosen:** trong handler `paste` của `#search`, nếu text khớp `PRIVATE_KEY` thì `preventDefault()`. Sau đó hiện, trong
+vùng suggestion (role=alert): "That is a private key. Keep it out of tools and chats; it was not pasted."
+*Sửa sau khi build: (1) regex gốc `/-----BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z0-9 ]*-----/` chạy theo bình phương (100 KB mất 1,4 s, bản cũ 16 ms); regex thật là
+`/-----BEGIN (?=[A-Z0-9 ]*-----)[A-Z0-9 ]*PRIVATE KEY/` (tuyến tính, có test thời gian trong Chromium với ba payload, mỗi cái dưới 300 ms). (2) Chặn ở `paste` chưa đủ: kéo thả
+hoặc autofill chỉ bắn sự kiện `input`, và key vẫn nằm lại trong `#search`. Hàm `refuseKey()` xóa ô, vẽ lại danh sách rồi hiện cảnh báo; nó được gọi từ handler `paste` và từ đầu `renderList()`.
+Câu cảnh báo khác với câu của tool Certificate (câu đó nói "only certificates and CSRs are read here"). Không chặn: khóa PuTTY `.ppk`, JWK riêng, `---- BEGIN SSH2 ENCRYPTED PRIVATE KEY ----` của ssh.com.*
 **Rejected:** mở tool Certificate để báo lỗi. Cách đó đưa key vào một ô khác.
 
 ### D11 - ObjectId là một tool mới, giờ local, câu lệnh mẫu dùng `$gt`
@@ -148,7 +177,7 @@ không chứa ký tự nào bị encode, nên không đổi.
 - Nhóm Inspect, ngay sau Timestamp. Title "MongoDB ObjectId". Icon mới `leaf`, màu `#13aa52`.
 - Bố cục: ô ObjectId; dòng nhãn `Local time (GMT±hh:mm)` có nút Now; lưới 6 ô số (3 cột); rồi các dòng kết quả
   dùng `rows()`.
-- Các dòng kết quả: `ObjectId("…")`; câu lệnh mẫu; rồi `timeRows(date)` từ `src/tools/time.js` (Local, UTC,
+- Các dòng kết quả: `Shell` = `ObjectId("…")`; `Query` = câu lệnh mẫu (có nút Copy); rồi `timeRows(date)` từ `src/tools/time.js` (Local, UTC,
   ISO 8601, Relative, Unix seconds, Unix milliseconds).
 
 **Rejected:**
@@ -156,7 +185,11 @@ không chứa ký tự nào bị encode, nên không đổi.
 - Một ô `datetime-local`: khác trang gốc. Bạn yêu cầu "giống như ảnh".
 
 ### D12 - Timestamp ObjectId là 32 bit không dấu
-**Chosen:** khoảng 1970–2106, giống BSON spec, driver Node (`readUInt32BE`) và trang gốc.
+**Chosen:** khoảng 1970–2106, giống BSON spec, driver Node (`readUInt32BE`) và trang gốc. Khoảng này kiểm trên thời điểm UTC.
+Ô Year của giờ local nhận 1969–2106, vì 1970-01-01T00:00:00Z là 1969-12-31 19:00 ở New York. *Sửa sau khi build: bản đầu đặt min 1970 cho ô local; review vòng 1 của Phase 5 tìm ra lỗi này.*
+Giờ local lặp lại hai lần (đồng hồ lùi): `fromLocalParts(parts, previous)` thử thời điểm có cùng offset UTC với `previous` (thời điểm đang hiển thị), dùng nó nếu đọc ngược sáu ô ra đúng input,
+nếu không thì lấy lần sớm hơn; giờ bị bỏ qua cho ra lỗi. View giữ `shown` (Date đang hiển thị) và truyền vào. *Sửa sau khi build: bản đầu luôn lấy lần sớm hơn, nên sửa ô Second ở lần thứ hai nhảy lùi 60 phút mà không báo.
+Ghi nhận (thấp): `shown` đổi theo từng phím gõ, nên một giá trị hợp lệ trung gian có thể đổi offset ưu tiên; kết quả vẫn là một thời điểm đúng cho giờ đó.* Nút Now làm tròn xuống giây trong `showTime`.
 **Rejected:** 32 bit có dấu (1901–2038). Bản này sai với các driver hiện nay.
 
 ### D13 - Commit mỗi phase lên `main` và push lên fork qua SSH
@@ -194,11 +227,11 @@ Việc push thẳng lên `main` là cách tôi hiểu câu đó. Bạn xác nh�
 - Thêm các dòng Local, UTC, Relative, Unix ms (dùng lại `timeRows`). Bạn có thể bỏ.
 - Không đưa phần giải thích dài và đoạn hàm JavaScript của trang gốc vào. Chỉ có một dòng hint.
 - Handler JSX không an toàn bị bỏ. Hint của tool HTML to JSX nói điều này.
-- Giới hạn YAML là 1.000.000 giá trị. Cost tối đa của bcrypt verify là 15.
-- Ngưỡng thời gian: XML DOCTYPE dưới 100 ms; `detect()` 100 KB dưới 200 ms; YAML bomb dưới 500 ms;
+- Giới hạn YAML là 12.000.000 ký tự JSON in ra (*Sửa sau khi build: không còn là 1.000.000 giá trị, xem D3*). Cost tối đa của bcrypt verify là 15.
+- Ngưỡng thời gian: XML DOCTYPE dưới 100 ms; `detect()` 100 KB dưới 200 ms; YAML bomb dưới 500 ms (*Sửa sau khi build: test này flaky khi máy tải nặng*);
   `pxToRemInCss` dưới 200 ms; bcrypt từ chối dưới 100 ms.
 - Sau phase cuối, documenter cập nhật README (danh sách tool, số tool 35 → 36), số tool trong `orca-plugin.json`,
-  và `CHANGELOG.md` (mục Unreleased).
+  và `CHANGELOG.md` (mục Unreleased). *Sửa sau khi build: việc này làm sau khi gộp upstream 0.6.1 và thêm Resume token: README và `orca-plugin.json` ghi 45 tool, `CHANGELOG.md` có mục `0.7.0 – 2026-11-04`, version là 0.7.0.*
 - Các file test hiện có (`test/tools/*.test.mjs`, `test/detect.test.mjs`, `test/panel.test.mjs`) không gắn với REQ
   nào. Chúng giữ cho hành vi hiện tại không đổi qua shared gate `npm test`, tức là chúng bảo vệ anti-goal "đầu ra
   cho input bình thường bị thay đổi". Nếu một phase phải sửa một test hiện có, reviewer phải hỏi lý do.

@@ -1,6 +1,6 @@
 {
   "name": "orca-dev-toolbox",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "description": "Offline developer tools in Orca's sidebar",
   "license": "MIT",
