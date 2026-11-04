@@ -25,17 +25,17 @@ Mọi số nhiều byte là big-endian.
 | 30 | NaN | không có |
 | 41 | 0 | không có |
 | 43..50 | số dương, phần nguyên 1..8 byte | xem dưới |
-| 40..33 | số âm, phần nguyên 1..8 byte (40 = 1 byte, 33 = 8 byte) | xem dưới; **mọi byte dữ liệu của số âm bị đảo bit** (kể cả các byte đọc thêm) |
-| 42 / 31 | số dương / âm nhỏ (small magnitude) | 8 byte |
-| 51 / 32 | số dương / âm lớn (large magnitude) | 8 byte |
+| 39..32 | số âm, phần nguyên 1..8 byte (39 = 1 byte, 32 = 8 byte) | xem dưới; **mọi byte dữ liệu của số âm bị đảo bit** (kể cả các byte đọc thêm) |
+| 42 / 40 | số dương / âm nhỏ (small magnitude) | 8 byte |
+| 51 / 31 | số dương / âm lớn (large magnitude) | 8 byte |
 
-**Số nguyên (43..50, 40..33):** đọc N byte thành số E. Bit thấp nhất của E cho biết có phần thập phân; phần nguyên = E >> 1.
+**Số nguyên (43..50, 39..32):** đọc N byte thành số E. Bit thấp nhất của E cho biết có phần thập phân; phần nguyên = E >> 1.
 Không có phần thập phân: giá trị là ±phần nguyên (BigInt nếu vượt `Number.MAX_SAFE_INTEGER`). Có phần thập phân: đọc thêm `8 − N` byte, ghép sau
 phần nguyên thành F (F = (phần nguyên << 8·(8−N)) | các byte đó); giá trị = (F với 2 bit thấp xóa về 0) × 2^(−8·(8−N)), lấy dấu; 2 bit thấp của F
 (khi `8 − N` = 0 thì coi là 3) là dấu hiệu Decimal128: nếu nó không phải 0 và không phải 2 thì bỏ qua thêm 8 byte.
-**Large magnitude (51/32):** 8 byte E (đảo bit nếu âm). Nếu bit cao nhất của E là 0: có-tiếp = E & 1; các bit double = (E >> 1) | (1 << 62);
+**Large magnitude (51/31):** 8 byte E (đảo bit nếu âm). Nếu bit cao nhất của E là 0: có-tiếp = E & 1; các bit double = (E >> 1) | (1 << 62);
 giá trị = ±double đó; nếu có-tiếp thì bỏ qua 8 byte. Nếu E toàn bit 1: ±Infinity. Còn lại (Decimal128 vượt khoảng double): bỏ qua 8 byte, ±Infinity.
-**Small magnitude (42/31):** 8 byte E (đảo bit nếu âm); xét 2 bit cao nhất: 0 → bỏ qua 8 byte, giá trị 0; 1 hoặc 2 → có-tiếp = E & 1,
+**Small magnitude (42/40):** 8 byte E (đảo bit nếu âm); xét 2 bit cao nhất: 0 → bỏ qua 8 byte, giá trị 0; 1 hoặc 2 → có-tiếp = E & 1,
 bits = (E − 2^62) >> 1, giá trị = ±double(bits) × 2^(−256), bỏ qua 8 byte nếu có-tiếp; 3 → bits = E >> 2, giá trị = ±double(bits).
 Engine dùng `BigInt` và `DataView` cho phép chuyển bit sang double.
 
@@ -45,6 +45,8 @@ Giá trị mức trên cùng lần lượt là: `timestamp` (Timestamp), `versio
 ngược lại `documentKey`. Các giá trị dư sau đó bỏ qua.
 
 ### D3 - Khác biệt chủ ý với gói npm
+- (Sửa 21:2x theo phát hiện của engine, kiểm bằng MongoDB thật và oracle: bảng số âm ở D1 trước đây ghi sai số byte kiểu.)
+- Gói npm có lỗi riêng ở `__proto__` làm tên trường, BOM đầu chuỗi, ngày trước 1970 và timestamp ≥ 2^31: bộ giải mã của chúng ta giải đúng các ca này (kiểm bằng test mã hóa-giải mã ngược); fixture oracle tránh chúng.
 - DBRef: namespace giải mã UTF-8 (gói in danh sách số `1,2,3`, một lỗi của gói). Test fixture so phần này bằng giá trị đúng.
 - Decimal128 hiện bằng double gần nhất (như gói); ghi chú trong giao diện không cần.
 - Đầu ra là đối tượng JavaScript thuần cho phần giao diện (ObjectId là chuỗi hex có đánh dấu kiểu, v.v.), không dùng lớp của thư viện `bson`;

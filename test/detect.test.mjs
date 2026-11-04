@@ -87,3 +87,21 @@ test('recognises docker run, SSH keys, otpauth URIs, payment QR payloads, .env a
   ]
   for (const [value, tool] of cases) assert.equal(detect(value), tool, value)
 })
+
+test('recognises a change stream resume token as JSON with a hex _data starting with 82 (REQ-043)', () => {
+  const data = '82612E8513000000012B022C0100296E5A1004A5093ABB38FE4B9EA67F01BB1A96D812463C5F6964003C5F5F5F78000004'
+  for (const value of [`{"_data":"${data}"}`, `  { "_data" : "${data.toLowerCase()}" }  `, `{"_id": {"_data": "${data}"}, "operationType": "insert", "ns": {"db": "a"}}`]) {
+    assert.equal(detect(value), 'resumetoken', value)
+  }
+  // Bare hex, other prefixes, non-hex, non-strings and broken JSON are not a token.
+  assert.equal(detect(data), null)
+  for (const value of [`{"_data":"83${data.slice(2)}"}`, '{"_data":"zz"}', '{"_data": 82}', '{"_data": {"_data": "82"}}', '{"_id": {"_data": null}}', '{"a": "_data"}', '{"_data":"82', '{"_id": 5, "_data": "zz"}', '{"_data":"82"}', '{"_data":"82zz"}', '{"_data":"82612E8513000000"}', '{"_data":"82612E851300000001A"}']) {
+    assert.notEqual(detect(value), 'resumetoken', value)
+  }
+  assert.equal(detect('{"_data": 82}'), 'json')
+  assert.equal(detect('{"_data":"82"}'), 'json')
+  // A whole timestamp (9 bytes) is the least that is taken for a token; what mongosh prints counts too.
+  assert.equal(detect('{"_data":"82612E851300000001"}'), 'resumetoken')
+  assert.equal(detect(`{ _data: '${data}' }`), 'resumetoken')
+  assert.equal(detect(`{ _id: { _data: '${data}' }, operationType: 'insert' }`), 'resumetoken')
+})
