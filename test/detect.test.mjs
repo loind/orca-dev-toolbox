@@ -70,3 +70,20 @@ test('leaves ordinary words and broken values to the search', () => {
     assert.equal(detect(value), null, value)
   }
 })
+
+test('recognises docker run, SSH keys, otpauth URIs, payment QR payloads, .env and versions', () => {
+  const cases = [
+    ['docker run -d -p 80:80 nginx', 'docker'],
+    ['sudo podman run --rm -it alpine sh', 'docker'],
+    ['ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIbUDsY2Ge6v8s5SLT2HjaNVMlN7t+Mt9MFordDbmsA3 me@host', 'sshkey'],
+    ['otpauth://totp/ACME:me?secret=JBSWY3DPEHPK3PXP', 'totp'],
+    ['00020101021238540010A00000072701240006970436011001234567890208QRIBFTTA530370454061500005802VN62220818Thanh toan don A126304C28D', 'vietqr'],
+    ['DATABASE_URL=postgres://localhost/app\nDEBUG=true', 'env'],
+    ['export API_KEY=abc', 'env'],
+    ['^1.2.0', 'semver'],
+    ['>=2.1.0', 'semver'],
+    ['v2.0.0', 'semver'],
+    ['1.0.0-rc.1', 'semver']
+  ]
+  for (const [value, tool] of cases) assert.equal(detect(value), tool, value)
+})

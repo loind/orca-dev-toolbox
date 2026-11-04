@@ -334,6 +334,43 @@ test('MongoDB ObjectId: Now is the current time floored to the second, in every 
   await page.close()
 })
 
+test('docker, env, JSON query, VietQR and TOTP work end to end', async () => {
+  const { page, frame, errors } = await openPanel(browser)
+  await paste(frame, '#search', 'docker run -d --name web -p 8080:80 nginx:alpine')
+  const docker = frame.locator('[data-view="docker"]')
+  assert.match(await docker.locator('.out').textContent(), /services:\n {2}web:\n {4}image: nginx:alpine/)
+  await frame.locator('.back').click()
+
+  await paste(frame, '#search', 'API_KEY=abc\nDEBUG=true')
+  const env = frame.locator('[data-view="env"]')
+  assert.deepEqual(JSON.parse(await env.locator('.out').textContent()), { API_KEY: 'abc', DEBUG: 'true' })
+  await env.getByRole('button', { name: 'K8s Secret' }).click()
+  assert.match(await env.locator('.out').textContent(), /API_KEY: YWJj/)
+  await frame.locator('.back').click()
+
+  await frame.locator('#search').fill('jsonpath')
+  await frame.locator('#search').press('Enter')
+  const query = frame.locator('[data-view="jsonpath"]')
+  await query.locator('textarea').fill('{"items":[{"name":"Pen","price":3},{"name":"Lamp","price":25}]}')
+  await query.locator('input[aria-label="JSONPath"]').fill('$.items[?(@.price < 10)].name')
+  assert.equal(JSON.parse(await query.locator('.out').textContent()), 'Pen')
+  await frame.locator('.back').click()
+
+  await frame.locator('#search').fill('vietqr')
+  await frame.locator('#search').press('Enter')
+  const vietqr = frame.locator('[data-view="vietqr"]')
+  await vietqr.locator('input[aria-label="Account number"]').fill('0123456789')
+  await vietqr.locator('img.qr').waitFor()
+  assert.match(await vietqr.locator('.out').textContent(), /^000201010211.*6304[0-9A-F]{4}$/)
+  await frame.locator('.back').click()
+
+  await paste(frame, '#search', 'otpauth://totp/Test:me?secret=JBSWY3DPEHPK3PXP')
+  const otp = frame.locator('[data-view="totp"]')
+  assert.match(await otp.locator('.otp').textContent(), /^\d{3} \d{3}$/)
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
 test('MongoDB ObjectId: a repeated hour stays in the offset shown, and the label follows the shown date (America/New_York)', async () => {
   const ny = await launchIn('America/New_York')
   try {
@@ -414,6 +451,31 @@ test('MongoDB ObjectId sits in Inspect right after Timestamp (REQ-026)', async (
   const { page, frame, errors } = await openPanel(browser)
   const inspect = await frame.locator('.group', { has: frame.locator('h2', { hasText: /^Inspect$/ }) }).locator('.tool-item .tool-name').allTextContents()
   assert.equal(inspect[inspect.indexOf('Timestamp') + 1], 'MongoDB ObjectId')
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
+test('footer links open GitHub through Orca, or copy the address on older Orca', async () => {
+  const { page, frame, errors } = await openPanel(browser)
+  const star = frame.locator('.home-footer button').first()
+  assert.equal(await star.textContent(), '★ Star on GitHub')
+  // Older Orca has no shell.openExternal: the button changes to say what it did instead.
+  await star.click()
+  assert.notEqual(await star.textContent(), '★ Star on GitHub')
+  await frame.evaluate(() => {
+    window.opened = []
+    window.orca = {
+      host: { has: (name) => name === 'shell.openExternal' },
+      shell: { openExternal: async (url) => { window.opened.push(url); return { opened: true } } }
+    }
+  })
+  await frame.locator('.home-footer button').nth(1).click()
+  await frame.locator('#search').fill('zzzz')
+  await frame.locator('.empty button.link').click()
+  assert.deepEqual(await frame.evaluate(() => window.opened), [
+    'https://github.com/loind/orca-dev-toolbox/issues/new/choose',
+    'https://github.com/loind/orca-dev-toolbox/issues/new/choose'
+  ])
   assert.deepEqual(errors, [])
   await page.close()
 })

@@ -3,12 +3,13 @@
 import { detect } from './detect.js'
 import { GROUPS, searchTools, TOOLS } from './registry.js'
 import { icon } from './icons.js'
-import { h, set } from './ui.js'
+import { copyText, h, set } from './ui.js'
 
 const RECENT_LIMIT = 3
 const PRIVATE_KEY = /-----BEGIN (?=[A-Z0-9 ]*-----)[A-Z0-9 ]*PRIVATE KEY/
 // What a pasted value is, where the tool's title does not say it.
-const LOOKS_LIKE = { jwt: 'a JWT', time: 'a timestamp', objectid: 'a MongoDB ObjectId', ids: 'a UUID', json: 'JSON', url: 'a URL', cron: 'a cron schedule', base64: 'Base64', color: 'a colour', number: 'a number', chmod: 'a file mode', escape: 'escaped text', curl: 'a curl command', cidr: 'an IP address', yaml: 'YAML', csv: 'CSV', sql: 'SQL', xml: 'XML', units: 'a size or duration', chars: 'hidden characters', cert: 'a certificate', bcrypt: 'a bcrypt hash', image: 'a data URI', cssunits: 'a CSS length' }
+const LOOKS_LIKE = { jwt: 'a JWT', time: 'a timestamp', objectid: 'a MongoDB ObjectId', ids: 'a UUID', json: 'JSON', url: 'a URL', cron: 'a cron schedule', base64: 'Base64', color: 'a colour', number: 'a number', chmod: 'a file mode', escape: 'escaped text', curl: 'a curl command', cidr: 'an IP address', yaml: 'YAML', csv: 'CSV', sql: 'SQL', xml: 'XML', units: 'a size or duration', chars: 'hidden characters', cert: 'a certificate', bcrypt: 'a bcrypt hash', image: 'a data URI', cssunits: 'a CSS length', docker: 'a docker run command', sshkey: 'an SSH public key', totp: 'a 2FA secret URI', vietqr: 'a payment QR payload', env: 'environment variables', semver: 'a version' }
+const REPO = 'https://github.com/loind/orca-dev-toolbox'
 const byId = new Map(TOOLS.map((tool) => [tool.id, tool]))
 const built = new Map()
 
@@ -70,6 +71,33 @@ function refuseKey() {
   set(suggestion, h('p', { class: 'error', role: 'alert' }, 'That is a private key. Keep it out of tools and chats; it was not pasted.'))
 }
 
+/**
+ * A link out of the sandboxed frame. Orca 1.4.246+ opens it in the browser (after the person's OK
+ * the first time); older Orca has no way out, so the address is copied instead.
+ */
+function externalLink(url, text, className) {
+  const button = h('button', { type: 'button', class: className, title: url }, text)
+  button.addEventListener('click', async () => {
+    try {
+      if (window.orca?.host?.has?.('shell.openExternal')) {
+        const { opened } = await window.orca.shell.openExternal(url)
+        if (opened !== false) return
+      }
+    } catch {}
+    const ok = await copyText(url)
+    button.textContent = ok ? 'Link copied' : url
+    setTimeout(() => { button.textContent = text }, 2500)
+  })
+  return button
+}
+
+function footer() {
+  return h('footer', { class: 'home-footer' },
+    externalLink(REPO, '★ Star on GitHub', 'link'),
+    h('span', { 'aria-hidden': 'true' }, '·'),
+    externalLink(`${REPO}/issues/new/choose`, 'Request a tool', 'link'))
+}
+
 function renderList() {
   if (PRIVATE_KEY.test(search.value)) return refuseKey()
   const query = search.value.trim()
@@ -86,12 +114,15 @@ function renderList() {
   }
   if (query && !detected) {
     const found = searchTools(query)
-    set(list, found.length ? section('Results', found) : h('p', { class: 'empty' }, `No tool matches “${query}”.`))
+    set(list, found.length
+      ? section('Results', found)
+      : h('div', { class: 'empty' }, h('p', {}, `No tool matches “${query}”.`), externalLink(`${REPO}/issues/new/choose`, 'Request it on GitHub', 'link')))
     return
   }
   set(list,
     !query && recent.length ? section('Recent', recent.map((id) => byId.get(id))) : null,
-    GROUPS.map((group) => section(group, TOOLS.filter((tool) => tool.group === group))))
+    GROUPS.map((group) => section(group, TOOLS.filter((tool) => tool.group === group))),
+    query ? null : footer())
 }
 
 function open(id, value) {

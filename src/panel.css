@@ -78,6 +78,11 @@ html.dark .tile {
 .tool-name { font-weight: 600; }
 .tool-desc { font-size: 12px; color: var(--muted-fg); }
 .empty { color: var(--muted-fg); padding: 8px; margin: 0; }
+.empty p { margin: 0 0 6px; }
+.home-footer { display: flex; white-space: nowrap; gap: 8px; align-items: center; justify-content: center; padding: 16px 8px 4px; color: var(--muted-fg); font-size: 12px; }
+button.link { background: none; border: 0; padding: 2px 0; color: var(--muted-fg); font: inherit; font-size: 12px; cursor: pointer; }
+.empty button.link { text-decoration: underline; }
+button.link:hover, button.link:focus-visible { color: var(--fg); text-decoration: underline; }
 
 /* A tool: a header with the way back, then its view. */
 .tool-header {
@@ -99,7 +104,7 @@ html.dark .tile {
   padding: 3px 9px; cursor: pointer; color: var(--muted-fg); font-weight: 500;
 }
 .segmented button:hover, .chip:hover { background: var(--accent); color: var(--fg); }
-.segmented button[aria-pressed="true"] { background: var(--muted); color: var(--fg); border-color: var(--border); }
+.segmented button[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--muted); color: var(--fg); border-color: var(--border); }
 
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .field-label { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--muted-fg); text-transform: uppercase; }
@@ -266,3 +271,8 @@ b.added { color: color-mix(in srgb, #16a34a 80%, var(--fg)); }
 b.removed { color: color-mix(in srgb, var(--danger) 85%, var(--fg)); }
 
 [hidden] { display: none !important; }
+
+.otp-box { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.otp { font: 600 26px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.otp-time { margin-left: auto; min-width: 34px; text-align: right; font-size: 12px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.bar select { width: auto; flex: 1 1 0; min-width: 0; }

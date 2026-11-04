@@ -1,7 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 – 2026-11-03
 
+### Added
+- Star on GitHub and Request a tool links under the tool list, and a request link when a search finds nothing. Orca 1.4.246 and later opens them in the browser; older versions copy the address.
+
+## 0.6.0 – 2026-11-03
+
+### Added
+- Docker run ↔ Compose: `docker run` commands to a `compose.yaml`, and services back to `docker run`.
+- Env Variables: `.env` ↔ JSON, Kubernetes Secret or ConfigMap, `docker -e` flags, Compose and `export`.
+- JSON Query: JSONPath with filters, slices, recursive descent and `length()` / `match()`.
+- Semver: check a version against npm ranges, compare, sort and bump versions.
+- SSH Key: type, size and SHA256/MD5 fingerprints of public keys and `authorized_keys` files.
+- TOTP / 2FA: live codes from a Base32 secret or `otpauth://` URI.
+- Mock Data: fake records in English or Vietnamese as JSON, CSV, SQL or NDJSON.
+- VietQR: NAPAS bank-transfer QR codes, and reading any EMVCo payment payload.
+- Pasting a docker run command, `.env` lines, an SSH key, an `otpauth://` URI, a payment QR payload or a version range opens its tool.
+
+### Changed
 - Source, tests and build script moved from `build/` to the repository root; tests split per tool.
 - CI builds the panel, checks the committed `panel/index.html` is current, and runs the tests.
 

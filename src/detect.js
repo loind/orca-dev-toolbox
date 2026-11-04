@@ -32,7 +32,19 @@ const HEX_COLOR = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 const COLOR_FN = /^(rgba?|hsla?|oklch)\([^()]*\)$/i
 const PREFIXED_NUMBER = /^-?0(x[0-9a-f_]+|b[01_]+|o[0-7_]+)$/i
 const SYMBOLIC_MODE = /^[-dl]?[r-][w-][xsS-][r-][w-][xsS-][r-][w-][xtT-]$/
+const DOCKER_RUN = /^(sudo\s+)?(docker|podman)\s+(container\s+)?(run|create)\s/
+const SSH_KEY = /^([^\s#]+\s+)?(ssh-(rsa|ed25519|dss|ed448)|ecdsa-sha2-nistp\d+|sk-[\w-]+@openssh\.com)\s+AAAA[A-Za-z0-9+/]/m
+const OTPAUTH = /^otpauth:\/\/(totp|hotp)\//i
+const EMV_QR = /^000201\d{2}[\s\S]*6304[0-9A-F]{4}$/i
+// A bare 1.2.3 is left to the search: it is as likely a section number as a version.
+const VERSION_OR_RANGE = /^(([~^]|[<>]=?|=)\s*|v)\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$|^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+|\+[0-9A-Za-z.-]+)+$|^[~^]\d+(\.(\d+|x))?(\.(\d+|x))?$/
 const ESCAPED = /&(#\d+|#x[0-9a-f]+|[a-z]+\d*);|\\u(\{[0-9a-f]+\}|[0-9a-f]{4})/i
+
+// Every non-comment line is NAME=value with an upper-case name, as in .env files.
+function isEnv(text) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'))
+  return lines.length > 0 && lines.every((line) => /^(export\s+)?[A-Z_][A-Z0-9_]*=/.test(line))
+}
 
 function isJson(text) {
   if (!/^[[{]/.test(text)) return false
@@ -109,6 +121,10 @@ export function detect(value) {
   if (!text) return null
   if (HIDDEN.test(value)) return 'chars'
   if (CURL.test(text)) return 'curl'
+  if (DOCKER_RUN.test(text)) return 'docker'
+  if (SSH_KEY.test(text) && !/PRIVATE KEY/.test(text)) return 'sshkey'
+  if (OTPAUTH.test(text)) return 'totp'
+  if (EMV_QR.test(text)) return 'vietqr'
   if (PEM.test(text) && !/PRIVATE KEY/.test(text)) return 'cert'
   if (BCRYPT.test(text)) return 'bcrypt'
   if (DATA_URI.test(text)) return 'image'
@@ -118,6 +134,7 @@ export function detect(value) {
   if (UUID.test(text) || ULID.test(text)) return 'ids'
   if (isObjectId(text)) return 'objectid'
   if (IPV4_CIDR.test(text) || IPV6_CIDR.test(text)) return 'cidr'
+  if (VERSION_OR_RANGE.test(text)) return 'semver'
   if (TIMESTAMP.test(text) || ISO_DATE.test(text)) return 'time'
   if (HEX_COLOR.test(text) || COLOR_FN.test(text)) return 'color'
   if (PREFIXED_NUMBER.test(text)) return 'number'
@@ -127,6 +144,7 @@ export function detect(value) {
   if (SIZE.test(text)) return 'units'
   if (DURATION.test(text) && /\d/.test(text)) return 'units'
   if (text.includes('\n') && YAML_KEY.test(text) && isYaml(text)) return 'yaml'
+  if (isEnv(text)) return 'env'
   if (isCsv(text)) return 'csv'
   if (URL_LIKE.test(text)) return 'url'
   if (isCron(text)) return 'cron'
