@@ -45,26 +45,24 @@ giá trị của `--name`, nên chỉ `image` là chèn cờ thật; vẫn từ 
 Không dùng `--` trước image vì `docker run -- IMAGE` đổi cách đọc cờ.
 **Rejected:** bỏ im giá trị: người dùng không biết nó mất.
 
-### D4 - Regex trong JSONPath: kiểm tra bảo thủ chứ không chạy với timeout
-**Chosen:** `safeRegExp(source, flags)` áp quy tắc sau, dùng chung cho `=~`, `match()` và `search()`.
-Một bộ tách từ nhỏ quét mẫu: bỏ qua ký tự thoát (`\x`) và lớp ký tự (`[...]`), nhận ra nhóm `(...)` (mọi loại nhóm: `(?:`,
-lookahead, nhóm đặt tên) và lượng từ (`*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`, kèm `?` lười).
-- **Lặp không giới hạn:** `*`, `+`, `{n,}`. **Lặp nhiều lần:** `{n}` hoặc `{n,m}` với `m` ≥ 2. `?`, `{0,1}` và `{1}` không phải lặp.
-- Một nhóm là **nhóm lặp** nếu ngay sau nó là một lặp không giới hạn hoặc một lặp nhiều lần.
-- **Từ chối** khi: (a) một nhóm lặp không giới hạn có trong thân (ở mọi độ sâu) bất kỳ lượng từ nào, kể cả `?`, hoặc phép chọn `|`;
-  (b) một nhóm lặp nhiều lần có trong thân một lặp không giới hạn; (c) mẫu dài hơn 200 ký tự (đo trên mẫu của người dùng,
-  không phải mẫu đã bọc `^(?:...)$`); (d) mẫu có hơn 4 lặp không giới hạn.
-- Chuỗi dài hơn 2.000 ký tự coi là không khớp, không ném lỗi. Hệ quả đã biết: `!(@.v =~ /x/)` cho chuỗi quá dài là đúng.
-- Mẫu literal `=~` được kiểm tra ngay khi phân tích đường dẫn; mẫu của `match()`/`search()` (có thể đến từ dữ liệu) kiểm tra khi chạy.
-- Thông báo: `This regular expression is not allowed: <lý do>`, với lý do là "too long (200 characters at most)", "a repeated group holds
-  another repeat or a choice (|)" hoặc "too many open-ended repeats (4 at most)".
-- Cờ `g` và `y` giữ nguyên như hôm nay (không thuộc phạm vi).
-**Because:** JavaScript không hủy được một regex đang chạy; panel không có worker (CSP). Quy tắc chặn các dạng backtracking theo hàm mũ
-phổ biến (lặp lồng nhau, chọn trùng trong lặp) mà vẫn giữ được các mẫu thông thường như `^(\d{1,3}\.){3}\d{1,3}$`.
-**Giới hạn đã chấp nhận (nói rõ cho bạn):** đây **không** đảm bảo "không regex nào treo". Dạng đa thức không có nhóm (ví dụ `\w+\w+\w+$`,
-khoảng O(n³)) vẫn được phép ở mức tối đa 4 lặp trên 2.000 ký tự, nên một mẫu bệnh lý vẫn có thể chậm vài giây; một số mẫu tuyến tính hợp lệ
-như `(https?|ftp)+` hoặc `(a|b)*` bị từ chối.
-**Rejected:** Web Worker với timeout (CSP chặn). Viết bộ khớp regex riêng: quá lớn cho phạm vi này.
+### D4 - Regex trong JSONPath: bộ khớp riêng, thời gian tuyến tính (bạn chọn phương án A)
+**Chosen:** `=~`, `match()` và `search()` không dùng `RegExp` của JavaScript nữa. Một bộ khớp nhỏ trong `src/tools/regex.js` (kiểu Thompson/Pike:
+biên dịch mẫu thành chương trình trạng thái, rồi chạy mọi nhánh song song trên chuỗi một lần) trả lời "khớp hay không".
+- **Cú pháp hỗ trợ:** ký tự thường và ký tự thoát (`\.`, `\/`, `\n`, `\t`, `\r`, `\uXXXX`, `\xXX`…), `.`, lớp `[...]` (khoảng, phủ định `^`,
+  `\d \w \s` bên trong), `\d \D \w \W \s \S`, `\b \B`, `^ $`, nhóm `(...)`, `(?:...)`, nhóm đặt tên `(?<n>...)` (coi như nhóm thường), `|`,
+  và mọi lượng từ `* + ? {n} {n,} {n,m}` kể cả dạng lười (với câu hỏi có/không, lười và tham cho cùng kết quả). Cờ `i`, `m`, `s` có nghĩa như
+  JavaScript; `g` và `y` giữ nghĩa như mã hiện tại (engine kiểm tra và giữ nguyên).
+- **Không hỗ trợ (từ chối):** tham chiếu ngược (`\1`, `\k<n>`), lookahead/lookbehind (`(?=`, `(?!`, `(?<=`, `(?<!`), `\p{...}`, cờ `u`/`v`.
+  Thông báo: `This regular expression is not allowed: <tính năng> is not supported`.
+- **Giới hạn kích thước:** mẫu tối đa 200 ký tự; chương trình sau khi mở rộng các lặp đếm (`{n,m}`) tối đa 2.000 lệnh; chuỗi dài hơn
+  10.000 ký tự coi là không khớp (không ném lỗi). Nhờ vậy mọi lần khớp tối đa khoảng 2.000 × 10.000 bước.
+- `match()` là khớp toàn chuỗi, `search()` là khớp một phần: cả hai làm trong bộ khớp (cờ neo), **không** ghép chuỗi `^(?:...)$`.
+  Mẫu literal `=~` được biên dịch khi phân tích đường dẫn (lỗi cú pháp và tính năng không hỗ trợ báo ngay); mẫu của `match()`/`search()`
+  (có thể đến từ dữ liệu) biên dịch khi chạy.
+**Because:** đếm lượng từ không giới hạn được thời gian: `\w+\w+$` trên 2.000 ký tự mất 4,5 s, `\w+\w+\w+$` trên 800 ký tự 52-227 s,
+`^(a|a?){16}b` 4 s, và đã có cách vượt qua bằng mẫu không cân ngoặc. JavaScript không hủy được regex đang chạy, panel không có worker.
+JSONPath chỉ cần câu trả lời có/không, nên một bộ khớp không quay lui là nhỏ và **đảm bảo** không treo.
+**Rejected:** quy tắc đếm lượng từ của bản D4 trước (B: vẫn treo, từ chối mẫu thật); bỏ regex (C: mất tính năng); Web Worker (đổi API thành bất đồng bộ).
 
 ### D5 - `push(...spread)`: thay bằng vòng `for`
 **Chosen:** như đã làm ở `checkSize` của gói trước.
@@ -73,6 +71,8 @@ như `(https?|ftp)+` hoặc `(a|b)*` bị từ chối.
 **Chosen:** `mock`: tên bảng phải là định danh SQL (một hoặc hai đoạn). `semver`: cắt phần đầu vào trong thông báo lỗi.
 
 ## Agent's calls
+
+- **Bạn chọn A (14:3x):** bộ khớp regex tuyến tính cho JSONPath thay cho quy tắc đếm lượng từ (D4 mới).
 
 - Footer hai liên kết trỏ về fork `loind/orca-dev-toolbox` thay vì upstream (bạn chưa nói). Test footer của upstream đã đổi theo.
 - Quy trình giống gói trước: engine, hai reviewer độc lập, gate do tôi chạy, tôi commit trên nhánh `merge-upstream-0.6.1`.
