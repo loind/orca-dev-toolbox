@@ -46,7 +46,7 @@ Không dùng `--` trước image vì `docker run -- IMAGE` đổi cách đọc c
 **Rejected:** bỏ im giá trị: người dùng không biết nó mất.
 
 ### D4 - Regex trong JSONPath: bộ khớp riêng, thời gian tuyến tính (bạn chọn phương án A)
-**Chosen:** `=~`, `match()` và `search()` không dùng `RegExp` của JavaScript nữa. Một bộ khớp nhỏ trong `src/tools/regex.js` (kiểu Thompson/Pike:
+**Chosen:** `=~`, `match()` và `search()` không dùng `RegExp` của JavaScript nữa. Một bộ khớp nhỏ trong `src/tools/linear-regex.js` (`src/tools/regex.js` là của tool Regex tester, không đổi) (kiểu Thompson/Pike:
 biên dịch mẫu thành chương trình trạng thái, rồi chạy mọi nhánh song song trên chuỗi một lần) trả lời "khớp hay không".
 - **Cú pháp hỗ trợ:** ký tự thường và ký tự thoát (`\.`, `\/`, `\n`, `\t`, `\r`, `\uXXXX`, `\xXX`…), `.`, lớp `[...]` (khoảng, phủ định `^`,
   `\d \w \s` bên trong), `\d \D \w \W \s \S`, `\b \B`, `^ $`, nhóm `(...)`, `(?:...)`, nhóm đặt tên `(?<n>...)` (coi như nhóm thường), `|`,
