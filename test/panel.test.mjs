@@ -455,6 +455,53 @@ test('MongoDB ObjectId sits in Inspect right after Timestamp (REQ-026)', async (
   await page.close()
 })
 
+const RESUME_TOKEN = '82612E8513000000012B022C0100296E5A1004A5093ABB38FE4B9EA67F01BB1A96D812463C5F6964003C5F5F5F78000004'
+
+test('Resume token sits right after MongoDB ObjectId and decodes a pasted token at 300 px (REQ-043)', async () => {
+  const at = TOOLS.findIndex((tool) => tool.id === 'objectid')
+  assert.equal(TOOLS[at + 1].id, 'resumetoken')
+  assert.equal(TOOLS[at + 1].title, 'Resume token')
+  assert.equal(TOOLS[at + 1].group, 'Inspect')
+  const { page, frame, errors } = await openPanel(browser, { width: 300 })
+  const inspect = await frame.locator('.group', { has: frame.locator('h2', { hasText: /^Inspect$/ }) }).locator('.tool-item .tool-name').allTextContents()
+  assert.equal(inspect[inspect.indexOf('MongoDB ObjectId') + 1], 'Resume token')
+  await frame.locator('#search').fill('resume token')
+  await frame.locator('#search').press('Enter')
+  const view = frame.locator('[data-view="resumetoken"]')
+  await view.locator('textarea').fill(RESUME_TOKEN)
+  const text = await view.textContent()
+  assert.match(text, /2021-08-31T19:37:55\.000Z/)
+  assert.match(text, /a5093abb-38fe-4b9e-a67f-01bb1a96d812/)
+  assert.match(text, /"_id": "___x"/)
+  assert.match(text, /Token type.*128.*event/s)
+  assert.equal(await frame.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  // Each row has its own Copy button, as in the ObjectId tool.
+  assert.ok((await view.locator('.row .copy').count()) >= 7)
+  // A wrong token shows its error in the error box, with no horizontal scroll, even for one long word.
+  for (const bad of ['zz', 'x'.repeat(3000), '{"_data": "8261"}', `{"_data": "${'zz'.repeat(500)}"}`, `${RESUME_TOKEN.slice(0, 70)}${'50'.repeat(200)}${'14'.repeat(500000)}${'00'.repeat(200)}04`]) {
+    await view.locator('textarea').fill(bad)
+    assert.match(await view.locator('.error').textContent(), /^[A-Z].*\.$/s)
+    assert.equal(await view.locator('.row').count(), 0)
+    assert.equal(await frame.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  }
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
+test('pasting {"_data": "82…"} into the search opens Resume token with it filled (REQ-043)', async () => {
+  const { page, frame, errors } = await openPanel(browser, { width: 300 })
+  await paste(frame, '#search', `{"_data":"${RESUME_TOKEN}"}`)
+  await frame.waitForSelector('[data-view="resumetoken"]:not([hidden])')
+  assert.equal(await frame.locator('.title').textContent(), 'Resume token')
+  const view = frame.locator('[data-view="resumetoken"]')
+  assert.match(await view.locator('textarea').inputValue(), /"_data"/)
+  assert.match(await view.textContent(), /2021-08-31T19:37:55\.000Z/)
+  assert.match(await view.textContent(), /"_id": "___x"/)
+  assert.equal(await frame.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  assert.deepEqual(errors, [])
+  await page.close()
+})
+
 test('footer links open GitHub through Orca, or copy the address on older Orca', async () => {
   const { page, frame, errors } = await openPanel(browser)
   const star = frame.locator('.home-footer button').first()

@@ -31,6 +31,7 @@ import objectid from './views/objectid.js'
 import password from './views/password.js'
 import qr from './views/qr.js'
 import regex from './views/regex.js'
+import resumetoken from './views/resumetoken.js'
 import semver from './views/semver.js'
 import sql from './views/sql.js'
 import sshkey from './views/sshkey.js'
@@ -48,7 +49,7 @@ import yaml from './views/yaml.js'
 export const GROUPS = ['Inspect', 'Encode', 'Convert', 'Format', 'Generate', 'Text']
 
 export const TOOLS = [
-  jwt, cert, sshkey, time, objectid, cron, semver, http, cidr, chars,
+  jwt, cert, sshkey, time, objectid, resumetoken, cron, semver, http, cidr, chars,
   base64, image, url, escape,
   yaml, csv, env, docker, types, curl, jsx, cssunits, units, color, number, chmod,
   json, jsonpath, sql, xml,

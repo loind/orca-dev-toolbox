@@ -4,6 +4,7 @@ import { base64ToBytes, bytesToText } from './tools/codec.js'
 import { parseCron } from './tools/cron.js'
 import { guessDelimiter, parseCsv } from './tools/csv.js'
 import { parseObjectId } from './tools/objectid.js'
+import { tokenHex } from './tools/resumetoken.js'
 import { tokenizeXml } from './tools/xml.js'
 import { parseYaml } from './tools/yaml.js'
 
@@ -51,6 +52,18 @@ function isJson(text) {
   try {
     JSON.parse(text)
     return true
+  } catch {
+    return false
+  }
+}
+
+// JSON (or what mongosh prints) with a hex `_data` that starts with 82 (a Timestamp) and holds at least a whole
+// timestamp, at the top or in `_id`: a change stream resume token.
+// Bare hex is left alone: it is too easily something else.
+function isResumeToken(text) {
+  if (!text.startsWith('{') || !text.includes('_data')) return false
+  try {
+    return /^82(?:[0-9a-f]{2}){8,}$/i.test(tokenHex(text))
   } catch {
     return false
   }
@@ -139,6 +152,7 @@ export function detect(value) {
   if (HEX_COLOR.test(text) || COLOR_FN.test(text)) return 'color'
   if (PREFIXED_NUMBER.test(text)) return 'number'
   if (SYMBOLIC_MODE.test(text)) return 'chmod'
+  if (isResumeToken(text)) return 'resumetoken'
   if (isJson(text)) return 'json'
   if (XML.test(text) && isXml(text)) return 'xml'
   if (SIZE.test(text)) return 'units'
