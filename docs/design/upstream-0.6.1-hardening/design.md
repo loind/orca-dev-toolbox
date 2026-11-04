@@ -56,6 +56,8 @@ biên dịch mẫu thành chương trình trạng thái, rồi chạy mọi nhá
   Thông báo: `This regular expression is not allowed: <tính năng> is not supported`.
 - **Giới hạn kích thước:** mẫu tối đa 200 ký tự; chương trình sau khi mở rộng các lặp đếm (`{n,m}`) tối đa 2.000 lệnh; chuỗi dài hơn
   10.000 ký tự coi là không khớp (không ném lỗi). Nhờ vậy mọi lần khớp tối đa khoảng 2.000 × 10.000 bước.
+- **Ngân sách mỗi truy vấn:** `queryJson` đếm số bước luồng của mọi lần khớp regex trong một truy vấn; vượt ngân sách (engine chọn con số sao cho trường hợp xấu nhất dừng trong khoảng 1-2 s, ghi trong code) thì ném `This query does too much regular expression work`. Lớp ký tự kiểm bằng tìm kiếm nhị phân trên các khoảng đã sắp xếp (không quét tuyến tính). Cờ `i` dùng bảng gập ngược của BMP dựng một lần khi cần.
+- **Giới hạn đã chấp nhận:** với `g`/`y`, `lastIndex` có thể khác JavaScript khi một vòng lặp có thể khớp rỗng (JavaScript bỏ lần lặp rỗng, bộ khớp này không); kết quả có/không không đổi. `match()`/`search()` trước đây dùng cờ `u`; nay ký tự astral là hai đơn vị UTF-16 (`.` không khớp nguyên emoji), `\u{61}` là `u` lặp 61 lần. Cờ nhúng `(?i:...)` bị từ chối là không hỗ trợ.
 - `match()` là khớp toàn chuỗi, `search()` là khớp một phần: cả hai làm trong bộ khớp (cờ neo), **không** ghép chuỗi `^(?:...)$`.
   Mẫu literal `=~` được biên dịch khi phân tích đường dẫn (lỗi cú pháp và tính năng không hỗ trợ báo ngay); mẫu của `match()`/`search()`
   (có thể đến từ dữ liệu) biên dịch khi chạy.
