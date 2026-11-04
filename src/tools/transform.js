@@ -42,7 +42,7 @@ function fromJsonArray(text) {
   return value.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join('\n')
 }
 
-/** [id, label, transform(text, options)]; options: { prefix, suffix, separator } */
+/** [id, label, transform(text, options)]; options: { prefix, suffix, separator, mysql } */
 export const TRANSFORMS = [
   ['accents', 'Remove accents', (t) => removeAccents(t)],
   ['slug', 'Slug', (t) => lines(t).map((line) => slugify(line)).join('\n')],
@@ -51,10 +51,12 @@ export const TRANSFORMS = [
   ['oneLine', 'Join into one line', (t) => items(t).join(' ')],
   ['toList', 'Lines → list', (t, o) => items(t).join(o.separator ?? ', ')],
   ['fromList', 'List → lines', (t) => t.split(/[,;\t\n]+/).map((s) => s.trim()).filter(Boolean).join('\n')],
-  ['sqlIn', 'Lines → SQL IN', (t) => {
+  ['sqlIn', 'Lines → SQL IN', (t, o) => {
     const values = items(t)
     const numeric = values.every(isNumber)
-    return `(${values.map((v) => (numeric ? v : `'${v.replace(/'/g, "''")}'`)).join(', ')})`
+    // MySQL and MariaDB read \ as an escape, so a value ending in a backslash would eat its closing quote.
+    const quote = (v) => `'${(o.mysql ? v.replace(/\\/g, '\\\\') : v).replace(/'/g, "''")}'`
+    return `(${values.map((v) => (numeric ? v : quote(v))).join(', ')})`
   }],
   ['jsonArray', 'Lines → JSON array', (t) => {
     const values = items(t)

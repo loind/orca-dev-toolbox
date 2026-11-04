@@ -41,10 +41,31 @@ function eventName(name) {
 
 const camel = (name) => name.replace(/[-:]([a-z])/g, (_, c) => c.toUpperCase())
 
+// Names that are valid in JSX and cannot carry code. Anything else (spreads, dots, brackets) is dropped.
+const TAG_NAME = /^[A-Za-z][\w-]*(?::[A-Za-z_][\w-]*)?$/
+const ATTRIBUTE_NAME = /^[A-Za-z_][\w-]*(?::[A-Za-z_][\w-]*)?$/
+const CSS_NAME = /^(?:--[\w-]+|-?[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z][A-Za-z0-9]*)*)$/
+// A handler goes into `() => { … }`. Braces, backticks, slashes (comments, regexes), `<` and line breaks could
+// leave it or hide the closing braces; a quote that is never closed would swallow them.
+const SAFE_HANDLER = /^[^{}`/<\n\r\u2028\u2029]*$/
+
+function closesItsQuotes(code) {
+  let quote = ''
+  for (let i = 0; i < code.length; i++) {
+    if (quote) {
+      if (code[i] === '\\') i++
+      else if (code[i] === quote) quote = ''
+    } else if (code[i] === "'" || code[i] === '"') quote = code[i]
+  }
+  return !quote
+}
+
+const ESCAPES = { '\\': '\\\\', "'": "\\'", '\n': '\\n', '\r': '\\r', '\u2028': '\\u2028', '\u2029': '\\u2029' }
+
 function attributeName(raw, tag) {
   const name = raw.toLowerCase()
   if (name.startsWith('data-') || name.startsWith('aria-')) return name
-  if (name in RENAMED) return RENAMED[name]
+  if (Object.hasOwn(RENAMED, name)) return RENAMED[name]
   if (name === 'ondblclick') return 'onDoubleClick'
   if (/^on[a-z]+$/.test(name)) return eventName(name)
   if ((tag === 'input' || tag === 'textarea' || tag === 'select') && name === 'value') return 'defaultValue'
@@ -76,26 +97,29 @@ export function styleObject(css) {
     if (colon === -1) continue
     const property = declaration.slice(0, colon).trim()
     const value = declaration.slice(colon + 1).trim()
-    if (!property || !value) continue
+    if (!property || !value || !CSS_NAME.test(property)) continue
     const key = property.startsWith('--') ? `'${property}'` : styleKey(property)
     // Unitless properties take numbers; everything else stays a string, as written.
     const number = /^-?\d+(\.\d+)?$/.test(value) && UNITLESS.has(key) ? value : null
-    entries.push(`${key}: ${number ?? `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`}`)
+    entries.push(`${key}: ${number ?? `'${value.replace(/[\\'\n\r\u2028\u2029]/g, (c) => ESCAPES[c])}'`}`)
   }
   return `{{ ${entries.join(', ')} }}`
 }
 
-const TOKEN = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>|<\/?[A-Za-z][\w:.-]*(?:\s+[^\s"'>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>|[^<]+|</gi
+const TOKEN = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<(script|style)(?![\w:.-])[^>]*>[\s\S]*?<\/\1\s*>|<\/?[A-Za-z][\w:.-]*(?:\s+[^\s"'>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>|[^<]+|</gi
 const ATTRIBUTE = /([^\s"'>\/=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+))?/g
 
 function convertTag(raw) {
   const closing = raw.startsWith('</')
   const name = /^<\/?([A-Za-z][\w:.-]*)/.exec(raw)[1]
+  // A dotted name is a member expression in JSX (<window.alert> calls window.alert), so the tag goes and its content stays.
+  if (!TAG_NAME.test(name)) return { text: '', name, dropped: true }
   if (closing) return { text: `</${name}>`, name, closing: true }
   const tag = name.toLowerCase()
   const body = raw.slice(name.length + 1).replace(/\/?>$/, '')
   const attributes = []
   for (const [, rawName, rawValue] of body.matchAll(ATTRIBUTE)) {
+    if (!ATTRIBUTE_NAME.test(rawName)) continue
     const jsxName = attributeName(rawName, tag)
     if (rawValue === undefined) {
       attributes.push(jsxName)
@@ -103,54 +127,87 @@ function convertTag(raw) {
     }
     const value = rawValue.replace(/^["']|["']$/g, '')
     if (jsxName === 'style') attributes.push(`style=${styleObject(value)}`)
-    else if (/^on[A-Z]/.test(jsxName)) attributes.push(`${jsxName}={() => { ${value.trim().replace(/;$/, '')} }}`)
-    else attributes.push(`${jsxName}=${value.includes('"') ? `{${JSON.stringify(value)}}` : `"${value}"`}`)
+    else if (/^on[A-Z]/.test(jsxName)) {
+      const code = value.trim().replace(/;$/, '')
+      if (SAFE_HANDLER.test(code) && closesItsQuotes(code)) attributes.push(`${jsxName}={() => { ${code} }}`)
+    } else attributes.push(`${jsxName}=${value.includes('"') ? `{${JSON.stringify(value)}}` : `"${value}"`}`)
   }
   const selfClosing = raw.endsWith('/>') || VOID.has(tag)
   const attrs = attributes.length ? ` ${attributes.join(' ')}` : ''
   return { text: `<${name}${attrs}${selfClosing ? ' />' : '>'}`, name, selfClosing }
 }
 
-/** Converts markup to JSX. Several top-level elements are wrapped in a fragment. */
+/**
+ * Converts markup to JSX. The output is balanced whatever the input: a closing tag that matches nothing is dropped,
+ * a closing tag first closes the tags opened inside it, and tags still open at the end are closed. Anything at the
+ * root but one element (text, a comment, several elements) goes inside a fragment, because bare text or a bare
+ * comment in `return ( … )` is JavaScript, and JavaScript reads `<a>` after it as a comparison.
+ */
 export function htmlToJsx(html, { component = null } = {}) {
+  if (component !== null && !/^[A-Za-z_$][\w$]*$/.test(component)) component = 'Component'
   let out = ''
-  let depth = 0
+  // The open tags, and how many of each name are open (lower case), so a stray closing tag is dropped without a scan.
+  const open = []
+  const openCount = new Map()
   let roots = 0
-  for (const [raw] of html.trim().matchAll(TOKEN)) {
+  let bareRoot = false
+  const root = (element) => {
+    if (open.length) return
+    roots++
+    if (!element) bareRoot = true
+  }
+  for (const [raw, rawTag] of html.trim().matchAll(TOKEN)) {
     if (raw === '<') {
+      root(false)
       out += "{'<'}"
       continue
     }
     if (/^<!DOCTYPE/i.test(raw)) continue
     if (raw.startsWith('<!--')) {
+      root(false)
       out += `{/* ${raw.slice(4, -3).trim().replace(/\*\//g, '* /')} */}`
       continue
     }
-    const raw_ = /^<(script|style)\b/i.exec(raw)
-    if (raw_) {
-      const open = /^<[^>]*>/.exec(raw)[0]
-      const close = /<\/[^>]*>$/.exec(raw)[0]
-      const inner = raw.slice(open.length, raw.length - close.length)
-      if (depth === 0) roots++
-      out += `${convertTag(open).text}{\`${inner.replace(/`/g, '\\`').replace(/\$\{/g, '\\${')}\`}${convertTag(close).text}`
+    if (rawTag) {
+      // The text may hold `</` too, so the closing tag is the last one. `<style/>` is not self-closing in HTML.
+      const start = /^<[^>]*>/.exec(raw)[0]
+      const close = raw.slice(raw.lastIndexOf('</'))
+      const inner = raw.slice(start.length, raw.length - close.length)
+      root(true)
+      // Backslash first: `\${x}` must not become a real interpolation, and "\201C" must not become an octal escape.
+      out += `${convertTag(start).text.replace(/ \/>$/, '>')}{\`${inner.replace(/[\\`]|\$\{/g, (c) => `\\${c}`)}\`}${convertTag(close).text}`
       continue
     }
     if (raw.startsWith('<')) {
       const tag = convertTag(raw)
-      if (tag.closing) depth--
-      else {
-        if (depth === 0) roots++
-        if (!tag.selfClosing) depth++
+      if (tag.dropped) continue
+      if (tag.closing) {
+        const lower = tag.name.toLowerCase()
+        if (!openCount.get(lower)) continue
+        const index = open.findLastIndex((entry) => entry.lower === lower)
+        while (open.length > index) {
+          const entry = open.pop()
+          openCount.set(entry.lower, openCount.get(entry.lower) - 1)
+          out += `</${entry.name}>`
+        }
+        continue
       }
+      root(true)
       out += tag.text
+      if (!tag.selfClosing) {
+        const lower = tag.name.toLowerCase()
+        open.push({ name: tag.name, lower })
+        openCount.set(lower, (openCount.get(lower) ?? 0) + 1)
+      }
       continue
     }
     // Text: braces would start expressions in JSX.
-    if (depth === 0 && raw.trim()) roots++
+    if (raw.trim()) root(false)
     out += raw.replace(/[{}]/g, (c) => `{'${c}'}`)
   }
-  let jsx = out.trim()
-  if (roots > 1) jsx = `<>\n${indent(jsx, '  ')}\n</>`
+  while (open.length) out += `</${open.pop().name}>`
+  let jsx = out.trim() || '<></>'
+  if (roots > 1 || bareRoot) jsx = `<>\n${indent(jsx, '  ')}\n</>`
   if (!component) return jsx
   return `export default function ${component}() {\n  return (\n${indent(jsx, '    ')}\n  )\n}`
 }

@@ -13,12 +13,17 @@ export function parseDataUri(text) {
 
 /** Snippets for using a data URI in CSS, HTML and Markdown. */
 export function snippets(dataUri, { name = 'image', width, height } = {}) {
-  const size = width && height ? ` width="${width}" height="${height}"` : ''
+  // A data URI may be percent-encoded, so quotes, brackets, backslashes and spaces cannot end a url("…"), an
+  // attribute or a Markdown link early. A base64 PNG has none of them and stays as it is.
+  const uri = dataUri.replace(/["'()<>\\\s]/g, (c) => (c.charCodeAt(0) < 128 ? `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}` : encodeURIComponent(c)))
+  // The name sits in an attribute and in […]: no quote, angle bracket, ampersand, bracket, backslash or line break.
+  const label = name.replace(/["<>&[\]\\`]/g, '').replace(/\s/g, ' ')
+  const size = Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0 ? ` width="${width}" height="${height}"` : ''
   return [
     ['Data URI', dataUri],
-    ['CSS', `background-image: url("${dataUri}");`],
-    ['HTML', `<img src="${dataUri}" alt="${name}"${size} />`],
-    ['Markdown', `![${name}](${dataUri})`],
+    ['CSS', `background-image: url("${uri}");`],
+    ['HTML', `<img src="${uri}" alt="${label}"${size} />`],
+    ['Markdown', `![${label}](${uri})`],
     ['Base64 only', dataUri.slice(dataUri.indexOf(',') + 1)]
   ]
 }
