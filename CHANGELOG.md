@@ -2,6 +2,8 @@
 
 ## 0.7.0 – 2026-11-04
 
+First release of the fork [loind/orca-dev-toolbox](https://github.com/loind/orca-dev-toolbox), based on 0.6.1 of [thailoc-dev/orca-dev-toolbox](https://github.com/thailoc-dev/orca-dev-toolbox).
+
 ### Added
 - MongoDB ObjectId: shows the creation time held in an ObjectId, and builds the smallest ObjectId for a local date and time, ready for `db.collection.find({ _id: { $gt: ObjectId("…") } })` with a Copy button. Pasting 24 hex digits, `ObjectId("…")` or `{"$oid": "…"}` opens it.
 - Resume token: decodes a MongoDB change stream resume token into its timestamp, version, token type, collection UUID and document key (or event identifier for version 2 tokens). Pasting `{"_data": "8261…"}`, a whole change event with `_id._data`, or the `{ _data: '8261…' }` that mongosh prints opens it. Bare hex does not open it, but you can paste it into the tool.
@@ -25,6 +27,7 @@
 - Mock Data: a table name that is not a SQL identifier is refused.
 
 ### Changed
+- The plugin is now `loind.dev-toolbox` (publisher `loind`), so Orca treats it as a different plugin from `thailoc-dev.dev-toolbox`: install it from this repository and remove the old one.
 - JSON Query: regex filters (`=~`, `match()`, `search()`) run on a built-in matcher. Back references, lookahead, lookbehind, `\p{…}` and inline flags such as `(?i:…)` are refused with "This regular expression is not allowed". A pattern is at most 200 characters.
 - JSON Query: `match()` and `search()` no longer use the `u` flag, so a character outside the Basic Multilingual Plane (an emoji) counts as two units.
 - JSON Query: a value longer than 10,000 characters never matches a regex.

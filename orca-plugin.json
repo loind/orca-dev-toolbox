@@ -1,13 +1,13 @@
 {
   "manifestVersion": 2,
   "id": "dev-toolbox",
-  "publisher": "thailoc-dev",
+  "publisher": "loind",
   "name": "Dev Toolbox",
   "version": "0.7.0",
   "execution": "sandboxed-ui",
   "description": "45 offline developer tools in Orca's sidebar: JWT, certificates, Docker run to Compose, .env to Kubernetes, JSONPath, semver, 2FA codes, MongoDB ObjectId and resume tokens, mock data, VietQR and more.",
   "license": "MIT",
-  "repository": "https://github.com/thailoc-dev/orca-dev-toolbox",
+  "repository": "https://github.com/loind/orca-dev-toolbox",
   "engines": {
     "orca": ">=1.4.245"
   },

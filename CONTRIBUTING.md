@@ -1,6 +1,6 @@
 # Contributing
 
-Bug reports and tool ideas are welcome in [issues](https://github.com/thailoc-dev/orca-dev-toolbox/issues).
+Bug reports and tool ideas are welcome in [issues](https://github.com/loind/orca-dev-toolbox/issues).
 For a new tool, open an issue first so we can agree on scope before you write code.
 
 ## Setup

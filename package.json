@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thailoc-dev/orca-dev-toolbox.git"
+    "url": "git+https://github.com/loind/orca-dev-toolbox.git"
   },
   "type": "module",
   "engines": {

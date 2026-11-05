@@ -1,7 +1,7 @@
 # Dev Toolbox
 
-[![CI](https://github.com/thailoc-dev/orca-dev-toolbox/actions/workflows/ci.yml/badge.svg)](https://github.com/thailoc-dev/orca-dev-toolbox/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/tag/thailoc-dev/orca-dev-toolbox?label=release&sort=semver)](CHANGELOG.md)
+[![CI](https://github.com/loind/orca-dev-toolbox/actions/workflows/ci.yml/badge.svg)](https://github.com/loind/orca-dev-toolbox/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/loind/orca-dev-toolbox?label=release&sort=semver)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Decode a JWT, convert a timestamp or format some JSON without leaving [Orca](https://www.onorca.dev)
@@ -11,14 +11,12 @@ or asking an agent. 45 small tools in the right sidebar, all offline.
 
 ## Install
 
-From the community catalog: open
-[Dev Toolbox on onorca.dev](https://www.onorca.dev/plugins/thailoc-dev/orca-dev-toolbox) and click
-**Open in Orca**, or search for it in Settings → Plugins.
-
-To get the latest release before the catalog picks it up, install from Git in Settings → Plugins:
+This is a fork of [thailoc-dev/orca-dev-toolbox](https://github.com/thailoc-dev/orca-dev-toolbox) with
+security fixes and extra tools. The community catalog on onorca.dev lists the original plugin, so install
+this fork from Git in Settings → Plugins:
 
 ```
-https://github.com/thailoc-dev/orca-dev-toolbox.git#v0.6.1
+https://github.com/loind/orca-dev-toolbox.git#v0.7.0
 ```
 
 Requires Orca 1.4.245 or later.
@@ -64,7 +62,7 @@ leaves your machine, and the plugin asks Orca for no permissions.
 
 If Dev Toolbox saves you a trip to a website, a ⭐ on this repository helps other Orca users find it.
 
-Bug reports and tool requests are welcome in [issues](https://github.com/thailoc-dev/orca-dev-toolbox/issues).
+Bug reports and tool requests are welcome in [issues](https://github.com/loind/orca-dev-toolbox/issues).
 See [CONTRIBUTING.md](CONTRIBUTING.md) to build and test locally.
 
 ## License
